@@ -1,0 +1,38 @@
+{
+  "name": "homebooks-erp",
+  "version": "1.0.0",
+  "description": "HomeBooks — Complete Enterprise Pharmacy ERP using MERN Stack",
+  "private": true,
+  "workspaces": [
+    "server",
+    "client"
+  ],
+  "scripts": {
+    "dev": "concurrently -n \"SERVER,CLIENT\" -c \"blue.bold,green.bold\" \"npm run dev --workspace=server\" \"npm run dev --workspace=client\"",
+    "dev:server": "npm run dev --workspace=server",
+    "dev:client": "npm run dev --workspace=client",
+    "build": "npm run build --workspace=client",
+    "start": "npm run start --workspace=server",
+    "seed": "npm run seed --workspace=server",
+    "test": "npm run test:unit && npm run test:integration",
+    "test:unit": "npm run test:unit --workspace=server && npm run test:unit --workspace=client",
+    "test:integration": "npm run test:integration --workspace=server",
+    "test:e2e": "npx playwright test",
+    "lint": "npm run lint --workspace=server && npm run lint --workspace=client"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.49.0",
+    "concurrently": "^9.1.0"
+  },
+  "keywords": [
+    "pharmacy-erp",
+    "mern-stack",
+    "pos-billing",
+    "inventory-management",
+    "fefo",
+    "gst-billing",
+    "localwell-alternative"
+  ],
+  "author": "HomeBooks Team",
+  "license": "MIT"
+}
