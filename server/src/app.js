@@ -17,12 +17,35 @@ app.use(
   })
 );
 
-app.use(
-  cors({
-    origin: process.env.CORS_ORIGIN || 'http://localhost:5173',
-    credentials: true,
-  })
-);
+// Support comma-separated CORS origins, strip trailing slashes, and support Vercel preview domains
+const rawOrigins = process.env.CORS_ORIGIN || 'http://localhost:5173,http://localhost:3000';
+const allowedOrigins = rawOrigins.split(',').map((origin) => origin.trim().replace(/\/+$/, ''));
+
+const corsOptions = {
+  origin: (origin, callback) => {
+    // Allow non-browser requests or server-to-server calls with no origin header
+    if (!origin) return callback(null, true);
+
+    const normalizedOrigin = origin.replace(/\/+$/, '');
+
+    const isAllowed =
+      allowedOrigins.includes('*') ||
+      allowedOrigins.includes(normalizedOrigin) ||
+      (normalizedOrigin.endsWith('.vercel.app') && allowedOrigins.some((ao) => ao.includes('vercel.app')));
+
+    if (isAllowed) {
+      return callback(null, true);
+    }
+
+    return callback(new Error(`Origin ${origin} is not allowed by CORS`));
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept'],
+};
+
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions));
 
 app.use(compression());
 app.use(express.json({ limit: '10mb' }));

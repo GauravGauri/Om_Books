@@ -1,6 +1,8 @@
 import { loginUser, getProfile } from '../services/authService.js';
 import { User } from '../models/index.js';
 
+const isProduction = process.env.NODE_ENV === 'production';
+
 export const login = async (req, res, next) => {
   try {
     const { email, password } = req.body;
@@ -9,11 +11,11 @@ export const login = async (req, res, next) => {
     }
     const result = await loginUser({ email, password, req });
 
-    // Set secure cookie if needed
+    // Set cookie supporting cross-origin deployments (e.g. Vercel frontend + Render backend)
     res.cookie('token', result.token, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
+      secure: isProduction,
+      sameSite: isProduction ? 'none' : 'lax',
       maxAge: 24 * 60 * 60 * 1000,
     });
 
@@ -40,7 +42,11 @@ export const me = async (req, res, next) => {
 };
 
 export const logout = async (req, res) => {
-  res.clearCookie('token');
+  res.clearCookie('token', {
+    httpOnly: true,
+    secure: isProduction,
+    sameSite: isProduction ? 'none' : 'lax',
+  });
   res.json({ success: true, message: 'Logged out successfully' });
 };
 

@@ -19,7 +19,7 @@ const startServer = async () => {
       await seedData(false);
     }
 
-    const server = app.listen(PORT, () => {
+    const server = app.listen(PORT, '0.0.0.0', () => {
       console.log(`[HomeBooks ERP] Server running in ${process.env.NODE_ENV || 'development'} mode on port ${PORT}`);
       console.log(`[HomeBooks ERP] API Health check available at: http://localhost:${PORT}/api/v1/health`);
     });
