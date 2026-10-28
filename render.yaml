@@ -22,3 +22,4 @@ services:
         generateValue: true
       - key: CORS_ORIGIN
         sync: false
+
