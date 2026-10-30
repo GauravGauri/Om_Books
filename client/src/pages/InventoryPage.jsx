@@ -2,14 +2,13 @@ import React, { useState, useEffect } from 'react';
 import {
   Boxes,
   Search,
-  Filter,
   AlertTriangle,
   Clock,
   ArrowRightLeft,
-  Trash2,
   Sliders,
-  CheckCircle2,
-  Calendar,
+  Trash2,
+  CheckCircle,
+  FileText,
 } from 'lucide-react';
 import apiClient from '../api/client';
 import { useAuthStore } from '../store/useAuthStore';
@@ -23,14 +22,14 @@ export const InventoryPage = () => {
   const { currentOutlet } = useAuthStore();
   const [batches, setBatches] = useState([]);
   const [outlets, setOutlets] = useState([]);
-  const [expiryFilter, setExpiryFilter] = useState('all'); // 'all', 'valid', 'nearExpiry', 'expired'
   const [search, setSearch] = useState('');
+  const [expiryFilter, setExpiryFilter] = useState('all'); // all, nearExpiry, expired, valid
   const [pagination, setPagination] = useState({ page: 1, total: 0, pages: 1 });
   const [isLoading, setIsLoading] = useState(true);
 
-  // Modal states
+  // Stock Adjustment / Quarantine modal state
   const [selectedBatch, setSelectedBatch] = useState(null);
-  const [actionType, setActionType] = useState(null); // 'adjust', 'writeOff', 'transfer'
+  const [actionType, setActionType] = useState(null); // 'adjust' | 'writeOff' | 'transfer'
   const [actionQty, setActionQty] = useState(1);
   const [actionReason, setActionReason] = useState('');
   const [targetOutletId, setTargetOutletId] = useState('');
@@ -41,12 +40,16 @@ export const InventoryPage = () => {
 
   useEffect(() => {
     fetchBatches();
-  }, [expiryFilter, search, pagination.page, currentOutlet]);
+  }, [search, expiryFilter, pagination.page, currentOutlet]);
 
   const fetchOutlets = async () => {
     try {
       const res = await apiClient.get('/system/outlets');
       setOutlets(res.data || []);
+      if (res.data?.length > 1) {
+        const other = res.data.find((o) => o._id !== currentOutlet?._id);
+        if (other) setTargetOutletId(other._id);
+      }
     } catch (e) {
       console.error(e);
     }
@@ -58,6 +61,7 @@ export const InventoryPage = () => {
       const res = await apiClient.get('/inventory/batches', {
         params: {
           outletId: currentOutlet?._id,
+          search,
           expiryFilter: expiryFilter !== 'all' ? expiryFilter : undefined,
           page: pagination.page,
           limit: 15,
@@ -70,6 +74,19 @@ export const InventoryPage = () => {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleOpenAction = (batch, type) => {
+    setSelectedBatch(batch);
+    setActionType(type);
+    setActionQty(type === 'adjust' ? batch.availableQuantity : 1);
+    setActionReason(
+      type === 'writeOff'
+        ? 'Damaged packaging / Expired'
+        : type === 'adjust'
+        ? 'Physical stock audit variance'
+        : 'Inter-branch stock requisition'
+    );
   };
 
   const handleActionSubmit = async (e) => {
@@ -121,7 +138,7 @@ export const InventoryPage = () => {
 
       {/* Filter Tabs */}
       <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-3 rounded-2xl border border-slate-200/80 shadow-sm">
-        <div className="flex items-center gap-1.5 p-1 bg-slate-100 rounded-xl text-xs font-semibold">
+        <div className="flex items-center gap-1.5 p-1 bg-slate-100 rounded-xl text-xs font-semibold overflow-x-auto whitespace-nowrap max-w-full">
           {[
             { id: 'all', label: 'All Batches' },
             { id: 'valid', label: 'Valid Stock' },
@@ -143,14 +160,14 @@ export const InventoryPage = () => {
         </div>
 
         <div className="text-xs text-slate-500 font-medium">
-          Store: <strong className="text-slate-900">{currentOutlet?.name}</strong>
+          Store: <strong className="text-slate-900">{currentOutlet?.name || 'All Outlets'}</strong>
         </div>
       </div>
 
       {/* Batches Table */}
       <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
+          <table className="w-full text-left text-xs min-w-[720px]">
             <thead>
               <tr className="border-b border-slate-100 bg-slate-50/70 text-slate-400 font-semibold uppercase tracking-wider text-[10px]">
                 <th className="py-3 px-4">Medicine & SKU</th>
@@ -173,7 +190,7 @@ export const InventoryPage = () => {
               ) : batches.length === 0 ? (
                 <tr>
                   <td colSpan="8" className="py-8 text-center text-slate-400">
-                    No batches match the selected expiry filter.
+                    No inventory batches found matching filter.
                   </td>
                 </tr>
               ) : (
@@ -181,19 +198,20 @@ export const InventoryPage = () => {
                   <tr key={b._id} className="hover:bg-slate-50/80 transition-colors">
                     <td className="py-3 px-4">
                       <span className="font-bold text-slate-900 block">{b.product?.name}</span>
-                      <span className="text-[10px] text-slate-400 font-mono">
-                        SKU: {b.product?.sku} | Rack: {b.locationRack || 'A-1'}
-                      </span>
+                      <span className="text-[10px] text-slate-400 font-mono">{b.product?.sku}</span>
+                    </td>
+                    <td className="py-3 px-3 font-mono font-bold text-slate-900">
+                      <span>{b.batchNumber}</span>
+                      {b.locationRack && (
+                        <span className="text-[10px] text-slate-400 block font-sans">Loc: {b.locationRack}</span>
+                      )}
                     </td>
                     <td className="py-3 px-3">
-                      <span className="font-mono font-bold text-slate-800 bg-slate-100 px-2 py-0.5 rounded text-xs">
-                        {b.batchNumber}
-                      </span>
-                    </td>
-                    <td className="py-3 px-3">
-                      <span className="font-semibold text-slate-800 block">{formatDate(b.expiryDate)}</span>
-                      <span className="text-[10px] text-slate-400">
-                        {b.daysToExpiry > 0 ? `${b.daysToExpiry} days left` : 'Expired'}
+                      <span>{formatDate(b.expiryDate)}</span>
+                      <span className="text-[10px] text-slate-400 block font-mono">
+                        {b.daysRemaining < 0
+                          ? `${Math.abs(b.daysRemaining)}d Expired`
+                          : `${b.daysRemaining} days left`}
                       </span>
                     </td>
                     <td className="py-3 px-3">
@@ -202,53 +220,44 @@ export const InventoryPage = () => {
                       ) : b.expiryState === 'NEAR_EXPIRY' ? (
                         <Badge variant="warning">Near Expiry</Badge>
                       ) : (
-                        <Badge variant="success">Healthy FEFO</Badge>
+                        <Badge variant="success">Healthy</Badge>
                       )}
                     </td>
                     <td className="py-3 px-3 text-right font-mono text-slate-500">
                       {formatCurrency(b.purchaseCost)}
                     </td>
-                    <td className="py-3 px-3 text-right font-mono font-bold text-slate-900">
+                    <td className="py-3 px-3 text-right font-mono text-slate-900 font-bold">
                       {formatCurrency(b.sellingPrice)}
                     </td>
                     <td className="py-3 px-3 text-center">
-                      <span className="font-black text-sm text-slate-900">{b.availableQuantity}</span>
-                      <span className="text-[10px] text-slate-400 block">{b.product?.uom || 'Unit'}s</span>
+                      <span
+                        className={`font-mono font-bold text-xs ${
+                          b.availableQuantity <= 10 ? 'text-amber-600' : 'text-slate-900'
+                        }`}
+                      >
+                        {b.availableQuantity} units
+                      </span>
                     </td>
                     <td className="py-3 px-4 text-right">
                       <div className="flex items-center justify-end gap-1.5">
                         <button
-                          onClick={() => {
-                            setSelectedBatch(b);
-                            setActionType('adjust');
-                            setActionQty(b.availableQuantity);
-                          }}
-                          className="p-1.5 text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors"
-                          title="Physical Count Adjustment"
+                          onClick={() => handleOpenAction(b, 'adjust')}
+                          className="p-1.5 text-slate-500 hover:text-emerald-700 hover:bg-emerald-50 rounded-lg transition-colors"
+                          title="Stock Audit & Adjustment"
                         >
                           <Sliders className="w-3.5 h-3.5" />
                         </button>
                         <button
-                          onClick={() => {
-                            setSelectedBatch(b);
-                            setActionType('transfer');
-                            setActionQty(1);
-                            const other = outlets.find((o) => o._id !== currentOutlet?._id);
-                            if (other) setTargetOutletId(other._id);
-                          }}
-                          className="p-1.5 text-blue-500 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors"
-                          title="Transfer to Other Outlet"
+                          onClick={() => handleOpenAction(b, 'transfer')}
+                          className="p-1.5 text-slate-500 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors"
+                          title="Inter-branch Store Transfer"
                         >
                           <ArrowRightLeft className="w-3.5 h-3.5" />
                         </button>
                         <button
-                          onClick={() => {
-                            setSelectedBatch(b);
-                            setActionType('writeOff');
-                            setActionQty(b.availableQuantity);
-                          }}
-                          className="p-1.5 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors"
-                          title="Damage/Expiry Write-Off"
+                          onClick={() => handleOpenAction(b, 'writeOff')}
+                          className="p-1.5 text-slate-500 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors"
+                          title="Damage / Expiry Write-Off"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
@@ -260,43 +269,18 @@ export const InventoryPage = () => {
             </tbody>
           </table>
         </div>
-
-        {/* Pagination Bar */}
-        {pagination.pages > 1 && (
-          <div className="p-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
-            <span>Total {pagination.total} batches</span>
-            <div className="flex gap-1">
-              <Button
-                variant="secondary"
-                size="sm"
-                disabled={pagination.page <= 1}
-                onClick={() => setPagination({ ...pagination, page: pagination.page - 1 })}
-              >
-                Previous
-              </Button>
-              <Button
-                variant="secondary"
-                size="sm"
-                disabled={pagination.page >= pagination.pages}
-                onClick={() => setPagination({ ...pagination, page: pagination.page + 1 })}
-              >
-                Next
-              </Button>
-            </div>
-          </div>
-        )}
       </div>
 
-      {/* Stock Action Modal */}
+      {/* Stock Operations Modal */}
       <Modal
         isOpen={!!actionType}
         onClose={() => setActionType(null)}
         title={
           actionType === 'adjust'
-            ? 'Physical Audit Stock Adjustment'
+            ? 'Physical Stocktake Count Adjustment'
             : actionType === 'writeOff'
-            ? 'Write-Off Damaged / Expired Batch'
-            : 'Inter-Outlet Stock Transfer'
+            ? 'Quarantine & Write-Off Batch'
+            : 'Transfer Stock to Branch Store'
         }
         subtitle={`Medicine: ${selectedBatch?.product?.name} (Batch: ${selectedBatch?.batchNumber})`}
       >

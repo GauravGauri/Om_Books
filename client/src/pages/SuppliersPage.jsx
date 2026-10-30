@@ -302,7 +302,7 @@ export const SuppliersPage = () => {
       {/* Suppliers Table */}
       <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
+          <table className="w-full text-left text-xs min-w-[700px]">
             <thead>
               <tr className="border-b border-slate-100 bg-slate-50/70 text-slate-400 font-semibold uppercase tracking-wider text-[10px]">
                 <th className="py-3 px-4">Company Name</th>
@@ -401,10 +401,10 @@ export const SuppliersPage = () => {
       >
         <div className="space-y-5">
           {/* WhatsApp Sharing Card */}
-          <div className="p-4 rounded-2xl bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-50 border border-emerald-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="p-3 sm:p-4 rounded-2xl bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-50 border border-emerald-200 flex flex-col md:flex-row md:items-center justify-between gap-3">
             <div>
               <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-xl bg-emerald-600 text-white flex items-center justify-center shadow-sm">
+                <div className="w-8 h-8 rounded-xl bg-emerald-600 text-white flex items-center justify-center shadow-sm shrink-0">
                   <MessageCircle className="w-4 h-4 fill-white" />
                 </div>
                 <div>
@@ -416,14 +416,14 @@ export const SuppliersPage = () => {
               </div>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <div className="relative">
                 <input
                   type="text"
                   placeholder="WhatsApp Number..."
                   value={whatsappPhone}
                   onChange={(e) => setWhatsappPhone(e.target.value)}
-                  className="bg-white border border-emerald-300 rounded-xl px-3 py-1.5 text-xs text-slate-900 font-mono w-40 focus:outline-none focus:border-emerald-600"
+                  className="bg-white border border-emerald-300 rounded-xl px-3 py-1.5 text-xs text-slate-900 font-mono w-36 sm:w-40 focus:outline-none focus:border-emerald-600"
                 />
               </div>
 
@@ -487,8 +487,8 @@ export const SuppliersPage = () => {
               <span>Ledger Transaction History</span>
               {isLedgerLoading && <span className="text-slate-400 font-normal">Loading history...</span>}
             </div>
-            <div className="max-h-72 overflow-y-auto">
-              <table className="w-full text-left text-xs">
+            <div className="max-h-72 overflow-y-auto overflow-x-auto">
+              <table className="w-full text-left text-xs min-w-[550px]">
                 <thead className="bg-slate-50 text-slate-500 uppercase text-[10px] font-semibold sticky top-0">
                   <tr>
                     <th className="py-2.5 px-3">Date</th>

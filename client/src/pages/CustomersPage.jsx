@@ -122,8 +122,8 @@ export const CustomersPage = () => {
       </div>
 
       {/* Filter Toolbar */}
-      <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm flex flex-wrap items-center justify-between gap-3">
-        <div className="relative flex-1 max-w-md">
+      <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+        <div className="relative flex-1 sm:max-w-md">
           <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5 pointer-events-none" />
           <input
             type="text"
@@ -150,7 +150,7 @@ export const CustomersPage = () => {
       {/* Customers Table */}
       <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
+          <table className="w-full text-left text-xs min-w-[750px]">
             <thead>
               <tr className="border-b border-slate-100 bg-slate-50/70 text-slate-400 font-semibold uppercase tracking-wider text-[10px]">
                 <th className="py-3 px-4">Customer Name</th>
@@ -283,38 +283,40 @@ export const CustomersPage = () => {
         subtitle="Enable credit Khata, loyalty rewards, and prescription history"
       >
         <form onSubmit={handleAddSubmit} className="space-y-3">
-          <Input
-            label="Full Name"
-            value={newCustomer.name}
-            onChange={(e) => setNewCustomer({ ...newCustomer, name: e.target.value })}
-            placeholder="e.g. Anand Mahindra"
-            required
-          />
-          <Input
-            label="Phone Number"
-            value={newCustomer.phone}
-            onChange={(e) => setNewCustomer({ ...newCustomer, phone: e.target.value })}
-            placeholder="e.g. 9845012345"
-            required
-          />
-          <Input
-            label="Email Address"
-            type="email"
-            value={newCustomer.email}
-            onChange={(e) => setNewCustomer({ ...newCustomer, email: e.target.value })}
-            placeholder="anand@example.com"
-          />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <Input
+              label="Full Name"
+              value={newCustomer.name}
+              onChange={(e) => setNewCustomer({ ...newCustomer, name: e.target.value })}
+              placeholder="e.g. Anand Mahindra"
+              required
+            />
+            <Input
+              label="Phone Number"
+              value={newCustomer.phone}
+              onChange={(e) => setNewCustomer({ ...newCustomer, phone: e.target.value })}
+              placeholder="e.g. 9845012345"
+              required
+            />
+            <Input
+              label="Email Address"
+              type="email"
+              value={newCustomer.email}
+              onChange={(e) => setNewCustomer({ ...newCustomer, email: e.target.value })}
+              placeholder="anand@example.com"
+            />
+            <Input
+              label="Consulting Doctor"
+              value={newCustomer.doctorName}
+              onChange={(e) => setNewCustomer({ ...newCustomer, doctorName: e.target.value })}
+              placeholder="e.g. Dr. Ramesh Kumar"
+            />
+          </div>
           <Input
             label="Residential Address"
             value={newCustomer.address}
             onChange={(e) => setNewCustomer({ ...newCustomer, address: e.target.value })}
             placeholder="e.g. #23, 2nd Cross, Indiranagar"
-          />
-          <Input
-            label="Consulting Doctor"
-            value={newCustomer.doctorName}
-            onChange={(e) => setNewCustomer({ ...newCustomer, doctorName: e.target.value })}
-            placeholder="e.g. Dr. Ramesh Kumar"
           />
 
           <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">

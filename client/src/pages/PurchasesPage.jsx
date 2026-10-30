@@ -190,7 +190,7 @@ export const PurchasesPage = () => {
       {/* Invoices Table */}
       <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
+          <table className="w-full text-left text-xs min-w-[700px]">
             <thead>
               <tr className="border-b border-slate-100 bg-slate-50/70 text-slate-400 font-semibold uppercase tracking-wider text-[10px]">
                 <th className="py-3 px-4">Invoice / Bill No</th>
@@ -267,9 +267,9 @@ export const PurchasesPage = () => {
         title="Purchase Inward & Goods Receipt (GRN)"
         subtitle="Inward incoming medicine consignments, enter batches, and update wholesaler ledger"
       >
-        <form onSubmit={handleInwardSubmit} className="space-y-5">
+        <form onSubmit={handleInwardSubmit} className="space-y-4">
           {/* Top metadata */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 p-3 rounded-xl bg-slate-50 border border-slate-200">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-3 rounded-xl bg-slate-50 border border-slate-200">
             <div>
               <label className="text-xs font-semibold text-slate-700 block mb-1">Select Wholesaler / Supplier</label>
               <select
@@ -307,8 +307,8 @@ export const PurchasesPage = () => {
           {/* Add Item Row Buffer */}
           <div className="p-3.5 rounded-xl border border-emerald-200 bg-emerald-50/20 space-y-3">
             <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider">Add Medicine Consignment Item</h4>
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-2.5">
-              <div className="md:col-span-2">
+            <div className="grid grid-cols-1 sm:grid-cols-3 md:grid-cols-4 gap-2.5">
+              <div className="sm:col-span-2">
                 <label className="text-xs font-semibold text-slate-700 block mb-1">Medicine Name</label>
                 <select
                   value={selectedProductId}
@@ -338,7 +338,7 @@ export const PurchasesPage = () => {
               />
             </div>
 
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-2.5 items-end">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2.5 items-end">
               <Input
                 label="Quantity Inward"
                 type="number"
@@ -366,15 +366,17 @@ export const PurchasesPage = () => {
                 value={sellingPrice}
                 onChange={(e) => setSellingPrice(parseFloat(e.target.value) || 0)}
               />
-              <Button type="button" variant="primary" size="sm" onClick={handleAddItemToInward}>
-                + Add Item
-              </Button>
+              <div className="col-span-2 sm:col-span-1">
+                <Button type="button" variant="primary" size="sm" className="w-full" onClick={handleAddItemToInward}>
+                  + Add Item
+                </Button>
+              </div>
             </div>
           </div>
 
           {/* Staged Items List */}
-          <div className="border border-slate-200 rounded-xl overflow-hidden">
-            <table className="w-full text-left text-xs">
+          <div className="border border-slate-200 rounded-xl overflow-x-auto">
+            <table className="w-full text-left text-xs min-w-[550px]">
               <thead className="bg-slate-50 text-slate-500 font-semibold text-[10px] uppercase">
                 <tr>
                   <th className="p-2.5">Medicine</th>
@@ -389,26 +391,26 @@ export const PurchasesPage = () => {
               <tbody className="divide-y divide-slate-100">
                 {inwardItems.length === 0 ? (
                   <tr>
-                    <td colSpan="7" className="text-center py-4 text-slate-400">
-                      No items staged. Add items above to receive stock.
+                    <td colSpan="7" className="p-4 text-center text-slate-400">
+                      No items staged for inward yet. Fill above and click + Add Item.
                     </td>
                   </tr>
                 ) : (
                   inwardItems.map((item, idx) => (
                     <tr key={idx}>
-                      <td className="p-2.5 font-bold text-slate-800">{item.productName}</td>
+                      <td className="p-2.5 font-bold text-slate-900">{item.productName}</td>
                       <td className="p-2.5 font-mono">{item.batchNumber}</td>
-                      <td className="p-2.5">{formatDate(item.expiryDate)}</td>
-                      <td className="p-2.5 text-right font-bold">{item.quantity}</td>
+                      <td className="p-2.5 text-slate-500">{formatDate(item.expiryDate)}</td>
+                      <td className="p-2.5 text-right font-medium">{item.quantity}</td>
                       <td className="p-2.5 text-right font-mono">{formatCurrency(item.purchasePrice)}</td>
                       <td className="p-2.5 text-right font-mono font-bold">{formatCurrency(item.totalAmount)}</td>
                       <td className="p-2.5 text-center">
                         <button
                           type="button"
                           onClick={() => handleRemoveInwardItem(idx)}
-                          className="text-red-500 hover:text-red-700"
+                          className="text-slate-400 hover:text-red-500"
                         >
-                          <Trash2 className="w-3.5 h-3.5" />
+                          <Trash2 className="w-3.5 h-3.5 mx-auto" />
                         </button>
                       </td>
                     </tr>
@@ -419,7 +421,7 @@ export const PurchasesPage = () => {
           </div>
 
           {/* Payment & Settlement */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 rounded-xl bg-slate-50 border border-slate-200">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 rounded-xl bg-slate-50 border border-slate-200">
             <div className="space-y-2 text-xs">
               <div className="flex justify-between text-slate-600">
                 <span>Subtotal:</span>
@@ -469,7 +471,7 @@ export const PurchasesPage = () => {
             </div>
           </div>
 
-          <div className="flex justify-end gap-2 pt-2">
+          <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
             <Button variant="secondary" type="button" onClick={() => setShowInwardModal(false)}>
               Cancel
             </Button>

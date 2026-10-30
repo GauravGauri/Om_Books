@@ -177,8 +177,8 @@ export const ProductsPage = () => {
       </div>
 
       {/* Filter Toolbar */}
-      <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm flex flex-wrap items-center gap-3">
-        <div className="relative flex-1 min-w-[240px]">
+      <div className="bg-white p-3.5 sm:p-4 rounded-2xl border border-slate-200/80 shadow-sm flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-2.5 sm:gap-3">
+        <div className="relative flex-1 min-w-[200px]">
           <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5 pointer-events-none" />
           <input
             type="text"
@@ -189,36 +189,38 @@ export const ProductsPage = () => {
           />
         </div>
 
-        <select
-          value={selectedCategory}
-          onChange={(e) => setSelectedCategory(e.target.value)}
-          className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-xs text-slate-700 focus:outline-none focus:border-emerald-500 cursor-pointer"
-        >
-          <option value="">All Categories</option>
-          {categories.map((c) => (
-            <option key={c._id} value={c._id}>
-              {c.name}
-            </option>
-          ))}
-        </select>
+        <div className="flex items-center gap-2 flex-wrap">
+          <select
+            value={selectedCategory}
+            onChange={(e) => setSelectedCategory(e.target.value)}
+            className="flex-1 sm:flex-none bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-xs text-slate-700 focus:outline-none focus:border-emerald-500 cursor-pointer"
+          >
+            <option value="">All Categories</option>
+            {categories.map((c) => (
+              <option key={c._id} value={c._id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
 
-        <select
-          value={selectedSchedule}
-          onChange={(e) => setSelectedSchedule(e.target.value)}
-          className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-xs text-slate-700 focus:outline-none focus:border-emerald-500 cursor-pointer"
-        >
-          <option value="">All Schedules</option>
-          <option value="OTC">OTC (Over the counter)</option>
-          <option value="Schedule H">Schedule H</option>
-          <option value="Schedule H1">Schedule H1 (Controlled)</option>
-          <option value="Schedule X">Schedule X</option>
-        </select>
+          <select
+            value={selectedSchedule}
+            onChange={(e) => setSelectedSchedule(e.target.value)}
+            className="flex-1 sm:flex-none bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-xs text-slate-700 focus:outline-none focus:border-emerald-500 cursor-pointer"
+          >
+            <option value="">All Schedules</option>
+            <option value="OTC">OTC (Over the counter)</option>
+            <option value="Schedule H">Schedule H</option>
+            <option value="Schedule H1">Schedule H1 (Controlled)</option>
+            <option value="Schedule X">Schedule X</option>
+          </select>
+        </div>
       </div>
 
       {/* Medicines Table */}
       <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
+          <table className="w-full text-left text-xs min-w-[700px]">
             <thead>
               <tr className="border-b border-slate-100 bg-slate-50/70 text-slate-400 font-semibold uppercase tracking-wider text-[10px]">
                 <th className="py-3 px-4">Medicine Details</th>
@@ -241,75 +243,56 @@ export const ProductsPage = () => {
               ) : products.length === 0 ? (
                 <tr>
                   <td colSpan="8" className="py-8 text-center text-slate-400">
-                    No medicines match the selected filters.
+                    No medicines match the selected filter criteria.
                   </td>
                 </tr>
               ) : (
                 products.map((p) => {
-                  const isLow = (p.currentStock || 0) <= p.minStockLevel;
-
+                  const inStock = p.currentStock > 0;
                   return (
                     <tr key={p._id} className="hover:bg-slate-50/80 transition-colors">
                       <td className="py-3 px-4">
-                        <div className="flex items-start gap-2.5">
-                          <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-700 flex items-center justify-center shrink-0 font-bold text-xs mt-0.5">
-                            <Pill className="w-4 h-4" />
-                          </div>
-                          <div>
-                            <span className="font-bold text-slate-900 block">{p.name}</span>
-                            <span className="text-[11px] text-slate-500 block truncate max-w-xs">
-                              {p.genericName}
-                            </span>
-                            <span className="text-[10px] text-slate-400 font-mono">
-                              SKU: {p.sku} | Pack: {p.packSize}
-                            </span>
-                          </div>
-                        </div>
+                        <span className="font-bold text-slate-900 block">{p.name}</span>
+                        <span className="text-[10px] text-slate-400 truncate block max-w-xs">{p.genericName}</span>
                       </td>
+                      <td className="py-3 px-3 text-slate-600">{p.manufacturer?.shortName || p.manufacturer?.name || 'N/A'}</td>
                       <td className="py-3 px-3">
-                        <span className="text-slate-900 font-semibold">{p.manufacturer?.name || 'Pharma'}</span>
-                        <span className="text-[10px] text-slate-400 block">{p.category?.name}</span>
-                      </td>
-                      <td className="py-3 px-3">
-                        {p.scheduleType === 'Schedule H1' ? (
-                          <Badge variant="danger">Schedule H1</Badge>
-                        ) : p.scheduleType === 'Schedule H' ? (
-                          <Badge variant="warning">Schedule H</Badge>
-                        ) : (
-                          <Badge variant="default">OTC</Badge>
-                        )}
-                        <span className="text-[10px] text-slate-400 block mt-0.5">GST: {p.gstRate}%</span>
+                        <Badge
+                          variant={
+                            p.scheduleType === 'OTC'
+                              ? 'default'
+                              : p.scheduleType === 'Schedule H1'
+                              ? 'danger'
+                              : 'warning'
+                          }
+                        >
+                          {p.scheduleType}
+                        </Badge>
                       </td>
                       <td className="py-3 px-3 text-right font-mono text-slate-500">
                         {formatCurrency(p.purchasePrice)}
                       </td>
-                      <td className="py-3 px-3 text-right font-mono text-slate-700">{formatCurrency(p.mrp)}</td>
-                      <td className="py-3 px-3 text-right font-bold font-mono text-emerald-700">
+                      <td className="py-3 px-3 text-right font-mono text-slate-500">{formatCurrency(p.mrp)}</td>
+                      <td className="py-3 px-3 text-right font-mono font-bold text-emerald-700">
                         {formatCurrency(p.sellingPrice)}
                       </td>
                       <td className="py-3 px-3 text-center">
                         <span
-                          className={`font-bold px-2 py-0.5 rounded-full text-xs ${
-                            p.currentStock > 0
-                              ? isLow
-                                ? 'bg-amber-50 text-amber-700'
-                                : 'bg-emerald-50 text-emerald-700'
-                              : 'bg-red-50 text-red-700'
+                          className={`font-mono font-bold text-xs ${
+                            inStock ? 'text-slate-800' : 'text-red-500 font-black'
                           }`}
                         >
                           {p.currentStock || 0} {p.uom}s
                         </span>
                       </td>
                       <td className="py-3 px-4 text-right">
-                        <div className="flex items-center justify-end gap-1.5">
-                          <button
-                            onClick={() => handleOpenEdit(p)}
-                            className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-colors"
-                            title="Edit Medicine"
-                          >
-                            <Edit2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
+                        <button
+                          onClick={() => handleOpenEdit(p)}
+                          className="p-1.5 text-slate-500 hover:text-emerald-700 hover:bg-emerald-50 rounded-lg transition-colors"
+                          title="Edit Details"
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                        </button>
                       </td>
                     </tr>
                   );
@@ -321,9 +304,11 @@ export const ProductsPage = () => {
 
         {/* Pagination Bar */}
         {pagination.pages > 1 && (
-          <div className="p-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
-            <span>Total {pagination.total} medicines</span>
-            <div className="flex gap-1">
+          <div className="p-3 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-slate-500">
+            <span>
+              Page {pagination.page} of {pagination.pages} ({pagination.total} medicines)
+            </span>
+            <div className="flex gap-1.5">
               <Button
                 variant="secondary"
                 size="sm"
@@ -353,7 +338,7 @@ export const ProductsPage = () => {
         subtitle="Configure generic composition, schedule drug compliance and pricing"
       >
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Input
               label="Medicine Commercial Name"
               value={formData.name}
@@ -378,7 +363,7 @@ export const ProductsPage = () => {
             required
           />
 
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <Input
               label="SKU Code"
               value={formData.sku}
@@ -398,7 +383,7 @@ export const ProductsPage = () => {
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="text-xs font-semibold text-slate-700 block mb-1">Therapeutic Category</label>
               <select
@@ -432,7 +417,7 @@ export const ProductsPage = () => {
             </div>
           </div>
 
-          <div className="grid grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <Input
               label="Purchase Cost (₹)"
               type="number"
@@ -466,7 +451,7 @@ export const ProductsPage = () => {
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="text-xs font-semibold text-slate-700 block mb-1">Schedule Classification</label>
               <select
@@ -494,7 +479,7 @@ export const ProductsPage = () => {
               Cancel
             </Button>
             <Button variant="primary" type="submit">
-              {editingProduct ? 'Save Changes' : 'Create Medicine'}
+              {editingProduct ? 'Save Changes' : 'Create Product'}
             </Button>
           </div>
         </form>
