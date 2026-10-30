@@ -14,6 +14,7 @@ import apiClient from '../api/client';
 import { useAuthStore } from '../store/useAuthStore';
 import { formatCurrency, formatDate } from '../utils/cn';
 import { Button } from '../components/common/Button';
+import { Input } from '../components/common/Input';
 import { Badge } from '../components/common/Badge';
 import { Modal } from '../components/common/Modal';
 import { ThermalReceipt } from '../components/common/ThermalReceipt';
@@ -54,7 +55,7 @@ export const SalesHistoryPage = () => {
       setInvoices(res.invoices || []);
       setPagination(res.pagination || { page: 1, total: 0, pages: 1 });
     } catch (e) {
-      console.error(e);
+      console.error('Failed to fetch sales invoices:', e);
     } finally {
       setIsLoading(false);
     }
@@ -62,7 +63,7 @@ export const SalesHistoryPage = () => {
 
   const handleOpenReturn = (inv) => {
     setReturnInvoice(inv);
-    const returnable = inv.items.map((it) => ({
+    const returnable = (inv.items || []).map((it) => ({
       productId: it.product,
       productName: it.productName,
       batchId: it.batch,
@@ -135,7 +136,7 @@ export const SalesHistoryPage = () => {
         </div>
 
         <div className="text-xs text-slate-500 font-medium">
-          Store: <strong className="text-slate-900">{currentOutlet?.name}</strong>
+          Store: <strong className="text-slate-900">{currentOutlet?.name || 'All Outlets'}</strong>
         </div>
       </div>
 
@@ -177,15 +178,17 @@ export const SalesHistoryPage = () => {
                     <td className="py-3 px-3 text-slate-600">
                       <span>{formatDate(inv.createdAt)}</span>
                       <span className="text-[10px] text-slate-400 block font-mono">
-                        {new Date(inv.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        {inv.createdAt
+                          ? new Date(inv.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                          : ''}
                       </span>
                     </td>
                     <td className="py-3 px-3">
-                      <span className="font-bold text-slate-900 block">{inv.customerName}</span>
+                      <span className="font-bold text-slate-900 block">{inv.customerName || 'Walk-in Customer'}</span>
                       <span className="text-[10px] text-slate-400">{inv.customerPhone || 'Walk-in'}</span>
                     </td>
                     <td className="py-3 px-3 text-right font-medium">
-                      {inv.items?.reduce((acc, it) => acc + it.quantity, 0)} units
+                      {(inv.items || []).reduce((acc, it) => acc + (it.quantity || 0), 0)} units
                     </td>
                     <td className="py-3 px-3 text-right font-mono text-slate-500">
                       {formatCurrency(inv.taxableTotal)}
@@ -196,7 +199,7 @@ export const SalesHistoryPage = () => {
                     </td>
                     <td className="py-3 px-3 text-center">
                       <span className="font-semibold px-2 py-0.5 rounded-full text-[10px] bg-slate-100 text-slate-700">
-                        {inv.paymentMethod}
+                        {inv.paymentMethod || 'Cash'}
                       </span>
                     </td>
                     <td className="py-3 px-3 text-center">
@@ -259,7 +262,7 @@ export const SalesHistoryPage = () => {
         onClose={() => setShowReturnModal(false)}
         maxWidth="max-w-3xl"
         title="Initiate Customer Sales Return & Refund"
-        subtitle={`Original Bill: ${returnInvoice?.invoiceNumber} (${returnInvoice?.customerName})`}
+        subtitle={`Original Bill: ${returnInvoice?.invoiceNumber} (${returnInvoice?.customerName || 'Walk-in'})`}
       >
         <form onSubmit={handleProcessReturn} className="space-y-4">
           <p className="text-xs text-slate-600">

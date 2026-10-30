@@ -76,41 +76,14 @@ export const seedData = async (disconnectWhenDone = false) => {
     isMain: false,
   });
 
-  // 2. Create Users across various roles
+  // 2. Create Super Admin User (Only Super Admin account permitted)
   const password = 'Password@123';
   const superAdmin = await User.create({
-    name: 'Dr. Ramesh Sharma',
+    name: 'Super Admin',
     email: 'admin@homebooks.com',
     password,
     role: 'Super Admin',
     phone: '+91 98451 00001',
-    outlets: [mainOutlet._id, branchOutlet._id],
-  });
-
-  const pharmacist = await User.create({
-    name: 'Pooja Iyer (Reg. Pharmacist)',
-    email: 'pharmacist@homebooks.com',
-    password,
-    role: 'Pharmacist',
-    phone: '+91 98451 00002',
-    outlets: [mainOutlet._id],
-  });
-
-  const cashier = await User.create({
-    name: 'Arjun Verma',
-    email: 'cashier@homebooks.com',
-    password,
-    role: 'Cashier',
-    phone: '+91 98451 00003',
-    outlets: [mainOutlet._id],
-  });
-
-  const storeManager = await User.create({
-    name: 'Vikram Sethi',
-    email: 'manager@homebooks.com',
-    password,
-    role: 'Store Manager',
-    phone: '+91 98451 00004',
     outlets: [mainOutlet._id, branchOutlet._id],
   });
 
@@ -444,7 +417,7 @@ export const seedData = async (disconnectWhenDone = false) => {
     paymentMethod: 'Cash',
     paymentBreakdown: { cash: 34.0 },
     paymentStatus: 'Paid',
-    cashier: pharmacist._id,
+    cashier: superAdmin._id,
   });
 
   console.log('[Seed] HomeBooks seed data successfully injected!');

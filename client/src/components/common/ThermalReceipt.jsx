@@ -1,7 +1,7 @@
 import React from 'react';
 import { formatCurrency, formatDate } from '../../utils/cn';
 import { Button } from './Button';
-import { Printer, Download } from 'lucide-react';
+import { Printer } from 'lucide-react';
 
 export const ThermalReceipt = ({ invoice, outlet, onClose }) => {
   if (!invoice) return null;
@@ -72,19 +72,21 @@ export const ThermalReceipt = ({ invoice, outlet, onClose }) => {
           </div>
 
           <div className="divide-y divide-slate-100">
-            {invoice.items?.map((item, idx) => (
+            {(invoice.items || []).map((item, idx) => (
               <div key={idx} className="py-1 text-[10px]">
                 <div className="grid grid-cols-12 font-medium">
                   <span className="col-span-5 truncate">{item.productName}</span>
                   <span className="col-span-2 text-center text-slate-500">
-                    {new Date(item.expiryDate).toLocaleDateString('en-US', { month: '2-digit', year: '2-digit' })}
+                    {item.expiryDate
+                      ? new Date(item.expiryDate).toLocaleDateString('en-US', { month: '2-digit', year: '2-digit' })
+                      : 'N/A'}
                   </span>
                   <span className="col-span-2 text-right">{item.quantity}</span>
                   <span className="col-span-3 text-right font-bold">{formatCurrency(item.totalAmount)}</span>
                 </div>
                 <div className="text-[9px] text-slate-500 flex justify-between px-0.5">
                   <span>Batch: {item.batchNumber}</span>
-                  <span>MRP: {formatCurrency(item.mrp)} (GST {item.gstRate}%)</span>
+                  <span>MRP: {formatCurrency(item.mrp)} (GST {item.gstRate || 0}%)</span>
                 </div>
               </div>
             ))}
@@ -124,7 +126,7 @@ export const ThermalReceipt = ({ invoice, outlet, onClose }) => {
         </div>
 
         <div className="py-2 text-[10px] space-y-0.5 text-center text-slate-500">
-          <p>Payment Mode: <strong className="font-semibold text-slate-800">{invoice.paymentMethod}</strong></p>
+          <p>Payment Mode: <strong className="font-semibold text-slate-800">{invoice.paymentMethod || 'Cash'}</strong></p>
           <p className="italic">Goods once sold will be accepted back within 7 days with original cash memo.</p>
           <p className="font-semibold text-slate-700 mt-1">*** Thank you! Get Well Soon ***</p>
           <p className="text-[9px] text-slate-400">Powered by HomeBooks Pharmacy ERP</p>

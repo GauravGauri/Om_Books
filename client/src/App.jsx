@@ -29,6 +29,9 @@ export function App() {
           <Route path="inventory" element={<InventoryPage />} />
           <Route path="purchases" element={<PurchasesPage />} />
           <Route path="sales" element={<SalesHistoryPage />} />
+          <Route path="sales-invoices" element={<SalesHistoryPage />} />
+          <Route path="sales-invoice" element={<SalesHistoryPage />} />
+          <Route path="invoices" element={<SalesHistoryPage />} />
           <Route path="returns" element={<ReturnsPage />} />
           <Route path="customers" element={<CustomersPage />} />
           <Route path="suppliers" element={<SuppliersPage />} />

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Cross, Lock, Mail, ArrowRight, ShieldCheck, CheckCircle2 } from 'lucide-react';
+import { Cross, Lock, Mail, ShieldCheck, CheckCircle2, ArrowRight } from 'lucide-react';
 import { useAuthStore } from '../store/useAuthStore';
 import { Input } from '../components/common/Input';
 import { Button } from '../components/common/Button';
@@ -9,7 +9,7 @@ export const LoginPage = () => {
   const navigate = useNavigate();
   const { login, isLoading, error } = useAuthStore();
 
-  const [email, setEmail] = useState('pharmacist@homebooks.com');
+  const [email, setEmail] = useState('admin@homebooks.com');
   const [password, setPassword] = useState('Password@123');
 
   const handleSubmit = async (e) => {
@@ -22,11 +22,11 @@ export const LoginPage = () => {
     }
   };
 
-  const handleQuickLogin = async (demoEmail) => {
-    setEmail(demoEmail);
+  const handleSuperAdminLogin = async () => {
+    setEmail('admin@homebooks.com');
     setPassword('Password@123');
     try {
-      await login(demoEmail, 'Password@123');
+      await login('admin@homebooks.com', 'Password@123');
       navigate('/');
     } catch (err) {
       // Error handled in store
@@ -37,12 +37,18 @@ export const LoginPage = () => {
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-emerald-950 flex items-center justify-center p-4">
       <div className="w-full max-w-md bg-white/95 backdrop-blur-md rounded-3xl shadow-2xl border border-white/20 p-8">
         {/* Brand */}
-        <div className="text-center mb-8">
+        <div className="text-center mb-6">
           <div className="inline-flex w-14 h-14 rounded-2xl bg-gradient-to-tr from-emerald-600 to-teal-400 items-center justify-center text-white shadow-xl shadow-emerald-500/20 mb-3">
             <Cross className="w-8 h-8 fill-white" />
           </div>
+          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-[11px] font-semibold text-emerald-700 mb-2">
+            <ShieldCheck className="w-3.5 h-3.5" />
+            Super Admin Access Only
+          </div>
           <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">HomeBooks Pharmacy ERP</h1>
-          <p className="text-xs text-slate-500 mt-1 font-medium">Enterprise Retail Billing, FEFO Stock & Ledger</p>
+          <p className="text-xs text-slate-500 mt-1 font-medium">
+            Full-Access Management, POS Billing, Stock & Ledger Portal
+          </p>
         </div>
 
         {error && (
@@ -53,12 +59,12 @@ export const LoginPage = () => {
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <Input
-            label="Email Address"
+            label="Super Admin Email"
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             icon={Mail}
-            placeholder="pharmacist@homebooks.com"
+            placeholder="admin@homebooks.com"
             required
           />
 
@@ -73,52 +79,31 @@ export const LoginPage = () => {
           />
 
           <Button type="submit" variant="primary" className="w-full py-2.5 mt-2" isLoading={isLoading}>
-            Sign In to Pharmacy Portal
+            Sign In as Super Admin
           </Button>
         </form>
 
-        {/* Quick Demo Selector */}
-        <div className="mt-8 pt-6 border-t border-slate-100">
-          <p className="text-xs font-semibold text-slate-500 mb-3 text-center uppercase tracking-wider">
-            Quick 1-Click Role Login
-          </p>
-          <div className="grid grid-cols-2 gap-2 text-xs">
-            <button
-              type="button"
-              onClick={() => handleQuickLogin('pharmacist@homebooks.com')}
-              className="p-2.5 rounded-xl border border-slate-200 bg-slate-50 hover:bg-emerald-50 hover:border-emerald-300 text-left transition-colors font-medium text-slate-700"
-            >
-              <p className="font-bold text-slate-900">Pharmacist</p>
-              <p className="text-[10px] text-slate-500">POS & Dispensing</p>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => handleQuickLogin('admin@homebooks.com')}
-              className="p-2.5 rounded-xl border border-slate-200 bg-slate-50 hover:bg-emerald-50 hover:border-emerald-300 text-left transition-colors font-medium text-slate-700"
-            >
-              <p className="font-bold text-slate-900">Super Admin</p>
-              <p className="text-[10px] text-slate-500">Universal Access</p>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => handleQuickLogin('cashier@homebooks.com')}
-              className="p-2.5 rounded-xl border border-slate-200 bg-slate-50 hover:bg-emerald-50 hover:border-emerald-300 text-left transition-colors font-medium text-slate-700"
-            >
-              <p className="font-bold text-slate-900">Cashier</p>
-              <p className="text-[10px] text-slate-500">Checkout & Bills</p>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => handleQuickLogin('manager@homebooks.com')}
-              className="p-2.5 rounded-xl border border-slate-200 bg-slate-50 hover:bg-emerald-50 hover:border-emerald-300 text-left transition-colors font-medium text-slate-700"
-            >
-              <p className="font-bold text-slate-900">Store Manager</p>
-              <p className="text-[10px] text-slate-500">Stock & Purchases</p>
-            </button>
-          </div>
+        {/* 1-Click Super Admin Login Quick Card */}
+        <div className="mt-6 pt-5 border-t border-slate-100">
+          <button
+            type="button"
+            onClick={handleSuperAdminLogin}
+            disabled={isLoading}
+            className="w-full p-3.5 rounded-2xl border border-emerald-200 bg-emerald-50/70 hover:bg-emerald-100/70 transition-all text-left flex items-center justify-between group"
+          >
+            <div>
+              <div className="flex items-center gap-2">
+                <p className="font-bold text-xs text-emerald-900">1-Click Super Admin Sign In</p>
+                <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-emerald-600 text-white">
+                  Universal Access
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-500 mt-0.5">
+                admin@homebooks.com <span className="text-slate-400">•</span> Password@123
+              </p>
+            </div>
+            <ArrowRight className="w-4 h-4 text-emerald-600 group-hover:translate-x-1 transition-transform" />
+          </button>
         </div>
       </div>
     </div>

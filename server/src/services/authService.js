@@ -27,6 +27,11 @@ export const loginUser = async ({ email, password, req }) => {
     throw new Error('Invalid email or password');
   }
 
+  // Enforce Super Admin only login
+  if (user.role !== 'Super Admin') {
+    throw new Error('Access denied. Only Super Admin accounts are permitted to sign in.');
+  }
+
   if (!user.isActive) {
     throw new Error('Your account has been deactivated. Please contact administrator.');
   }

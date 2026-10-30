@@ -12,10 +12,15 @@ const startServer = async () => {
   try {
     await connectDB();
 
-    // Auto-seed if database is freshly started and empty
-    const userCount = await User.countDocuments();
-    if (userCount === 0) {
-      console.log('[HomeBooks ERP] Fresh database detected. Auto-seeding initial pharmacy dataset...');
+    // Remove other user accounts and ensure only Super Admin accounts exist
+    const removedNonAdmins = await User.deleteMany({ role: { $ne: 'Super Admin' } });
+    if (removedNonAdmins.deletedCount > 0) {
+      console.log(`[HomeBooks ERP] Cleaned up ${removedNonAdmins.deletedCount} non-Super Admin account(s).`);
+    }
+
+    const superAdminCount = await User.countDocuments({ role: 'Super Admin' });
+    if (superAdminCount === 0) {
+      console.log('[HomeBooks ERP] No Super Admin account detected. Auto-seeding initial dataset...');
       await seedData(false);
     }
 
