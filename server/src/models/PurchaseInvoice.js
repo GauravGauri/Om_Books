@@ -12,6 +12,11 @@ const purchaseInvoiceItemSchema = new mongoose.Schema({
     uppercase: true,
     trim: true,
   },
+  packSize: {
+    type: String,
+    trim: true,
+    default: '10 Tablets / Strip',
+  },
   mfgDate: Date,
   expiryDate: {
     type: Date,

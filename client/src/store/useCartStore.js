@@ -9,17 +9,58 @@ export const useCartStore = create((set, get) => ({
   paymentBreakdown: { cash: 0, upi: 0, card: 0, credit: 0 },
   customDiscountPercent: 0,
 
-  addItem: (product, batch, quantity = 1) => {
+  addItem: (productOrItem, batch, quantity = 1) => {
+    let item;
+    if (batch) {
+      // Called with (product, batch, quantity)
+      item = {
+        productId: productOrItem._id || productOrItem.productId,
+        productName: productOrItem.name || productOrItem.productName,
+        genericName: productOrItem.genericName,
+        hsnCode: productOrItem.hsnCode || '3004',
+        uom: productOrItem.uom || 'Strip',
+        packSize: productOrItem.packSize || productOrItem.uom || 'Strip',
+        batchId: batch._id || batch.batchId,
+        batchNumber: batch.batchNumber,
+        expiryDate: batch.expiryDate,
+        availableQuantity: batch.availableQuantity != null ? batch.availableQuantity : Infinity,
+        unitPrice: batch.sellingPrice != null ? batch.sellingPrice : (productOrItem.sellingPrice || 0),
+        mrp: batch.mrp != null ? batch.mrp : (productOrItem.mrp || 0),
+        gstRate: productOrItem.gstRate || 12,
+        discountPercent: 0,
+        quantity: quantity || 1,
+      };
+    } else {
+      // Called with single item object
+      const payload = productOrItem;
+      item = {
+        productId: payload.productId || payload._id,
+        productName: payload.productName || payload.name,
+        genericName: payload.genericName,
+        hsnCode: payload.hsnCode || '3004',
+        uom: payload.uom || payload.packSize || 'Strip',
+        packSize: payload.packSize || payload.uom || 'Strip',
+        batchId: payload.batchId || payload.batch?._id,
+        batchNumber: payload.batchNumber || payload.batch?.batchNumber || 'DEFAULT',
+        expiryDate: payload.expiryDate || payload.batch?.expiryDate,
+        availableQuantity: payload.availableQuantity != null ? payload.availableQuantity : (payload.batch?.availableQuantity ?? Infinity),
+        unitPrice: payload.unitPrice != null ? payload.unitPrice : (payload.sellingPrice || 0),
+        mrp: payload.mrp != null ? payload.mrp : (payload.unitPrice || 0),
+        gstRate: payload.gstRate != null ? payload.gstRate : 12,
+        discountPercent: payload.discountPercent || 0,
+        quantity: payload.quantity || 1,
+      };
+    }
+
     const { items } = get();
-    const existingIndex = items.findIndex((i) => i.batchId === batch._id);
+    const existingIndex = items.findIndex((i) => i.batchId === item.batchId);
+    const avail = item.availableQuantity != null ? item.availableQuantity : Infinity;
 
     if (existingIndex > -1) {
       const existing = items[existingIndex];
-      const newQty = existing.quantity + quantity;
-      if (newQty > batch.availableQuantity) {
-        throw new Error(
-          `Cannot add more than available stock (${batch.availableQuantity}) for batch ${batch.batchNumber}`
-        );
+      const newQty = existing.quantity + item.quantity;
+      if (newQty > avail) {
+        throw new Error(`Cannot add more than available stock (${avail}) for batch ${item.batchNumber}`);
       }
       const updatedItems = [...items];
       updatedItems[existingIndex] = {
@@ -28,28 +69,10 @@ export const useCartStore = create((set, get) => ({
       };
       set({ items: updatedItems });
     } else {
-      if (quantity > batch.availableQuantity) {
-        throw new Error(
-          `Cannot add more than available stock (${batch.availableQuantity}) for batch ${batch.batchNumber}`
-        );
+      if (item.quantity > avail) {
+        throw new Error(`Cannot add more than available stock (${avail}) for batch ${item.batchNumber}`);
       }
-      const newItem = {
-        productId: product._id,
-        productName: product.name,
-        genericName: product.genericName,
-        hsnCode: product.hsnCode,
-        uom: product.uom,
-        batchId: batch._id,
-        batchNumber: batch.batchNumber,
-        expiryDate: batch.expiryDate,
-        availableQuantity: batch.availableQuantity,
-        unitPrice: batch.sellingPrice,
-        mrp: batch.mrp,
-        gstRate: product.gstRate || 12,
-        discountPercent: 0,
-        quantity,
-      };
-      set({ items: [...items, newItem] });
+      set({ items: [...items, item] });
     }
   },
 

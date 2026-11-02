@@ -6,6 +6,7 @@ import {
   StockMovement,
   Supplier,
   Payment,
+  Product,
 } from '../models/index.js';
 import { logAudit } from '../middleware/auth.js';
 
@@ -100,6 +101,11 @@ export const receiveGoodsInvoice = async (data, user, req) => {
       });
     }
 
+    // Update Product packSize if specified
+    if (item.packSize) {
+      await Product.findByIdAndUpdate(item.product, { packSize: item.packSize });
+    }
+
     // Record Stock Movement
     await StockMovement.create({
       product: item.product,
@@ -117,6 +123,7 @@ export const receiveGoodsInvoice = async (data, user, req) => {
 
     processedItems.push({
       ...item,
+      packSize: item.packSize || '10 Tablets / Strip',
       taxAmount: Math.round(itemTax * 100) / 100,
       totalAmount: Math.round(itemTotal * 100) / 100,
       batchId: batch._id,
@@ -287,7 +294,7 @@ export const getPurchaseInvoices = async ({ outletId, supplierId, page = 1, limi
   const invoices = await PurchaseInvoice.find(query)
     .populate('supplier', 'companyName phone gstin')
     .populate('outlet', 'name code')
-    .populate('items.product', 'name genericName uom')
+    .populate('items.product', 'name genericName uom packSize')
     .sort({ createdAt: -1 })
     .skip(skip)
     .limit(parseInt(limit, 10))
@@ -314,7 +321,7 @@ export const getPurchaseOrders = async ({ outletId, status, page = 1, limit = 50
 
   const orders = await PurchaseOrder.find(query)
     .populate('supplier', 'companyName phone')
-    .populate('items.product', 'name genericName uom')
+    .populate('items.product', 'name genericName uom packSize')
     .sort({ createdAt: -1 })
     .skip(skip)
     .limit(parseInt(limit, 10))

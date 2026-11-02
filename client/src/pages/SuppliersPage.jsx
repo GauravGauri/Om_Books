@@ -14,6 +14,8 @@ import {
   Printer,
   Receipt,
   RotateCcw,
+  Download,
+  FileDown,
 } from 'lucide-react';
 import apiClient from '../api/client';
 import { useAuthStore } from '../store/useAuthStore';
@@ -22,6 +24,7 @@ import { Button } from '../components/common/Button';
 import { Input } from '../components/common/Input';
 import { Badge } from '../components/common/Badge';
 import { Modal } from '../components/common/Modal';
+import { generateLedgerPdf, downloadLedgerPdf } from '../utils/generateLedgerPdf';
 
 export const SuppliersPage = () => {
   const { currentOutlet } = useAuthStore();
@@ -43,6 +46,7 @@ export const SuppliersPage = () => {
   const [showLedgerModal, setShowLedgerModal] = useState(false);
   const [whatsappPhone, setWhatsappPhone] = useState('');
   const [copiedLedger, setCopiedLedger] = useState(false);
+  const [pdfNotice, setPdfNotice] = useState('');
 
   // Add Supplier Modal
   const [showAddModal, setShowAddModal] = useState(false);
@@ -84,6 +88,7 @@ export const SuppliersPage = () => {
     setWhatsappPhone(sup.phone || '');
     setShowLedgerModal(true);
     setIsLedgerLoading(true);
+    setPdfNotice('');
     try {
       const res = await apiClient.get(`/suppliers/${sup._id}/history`);
       setLedgerHistory(res.data || { invoices: [], payments: [], returns: [] });
@@ -94,7 +99,7 @@ export const SuppliersPage = () => {
     }
   };
 
-  const buildLedgerMessage = (supplier, history) => {
+  const buildLedgerMessage = (supplier, history, pdfFilename = '') => {
     const storeName = currentOutlet?.name || 'HomeBooks Central Pharmacy';
     const storePhone = currentOutlet?.phone || '';
     const today = new Date().toLocaleDateString('en-IN', {
@@ -175,10 +180,27 @@ export const SuppliersPage = () => {
       msg += `----------------------------------------\n`;
     }
 
+    if (pdfFilename) {
+      msg += `📄 *OFFICIAL PDF STATEMENT:* Generated and saved as "${pdfFilename}".\n`;
+      msg += `_Please find the attached PDF document for your records & reconciliation._\n\n`;
+    }
+
     msg += `_This is a computer-generated account ledger from ${storeName}._\n`;
     msg += `_Please review and confirm reconciliation._`;
 
     return msg;
+  };
+
+  const handleDownloadPdf = () => {
+    if (!selectedLedgerSupplier) return;
+    try {
+      const filename = downloadLedgerPdf(selectedLedgerSupplier, ledgerHistory, currentOutlet);
+      setPdfNotice(`✓ Downloaded official PDF ledger: ${filename}`);
+      setTimeout(() => setPdfNotice(''), 4500);
+    } catch (err) {
+      console.error(err);
+      alert('Failed to generate PDF statement: ' + err.message);
+    }
   };
 
   const handleSendWhatsApp = (targetPhone) => {
@@ -194,9 +216,20 @@ export const SuppliersPage = () => {
       cleanPhone = `91${cleanPhone}`;
     }
 
-    const message = buildLedgerMessage(selectedLedgerSupplier, ledgerHistory);
+    // Auto generate & download PDF statement
+    let filename = '';
+    try {
+      filename = downloadLedgerPdf(selectedLedgerSupplier, ledgerHistory, currentOutlet);
+    } catch (e) {
+      console.error('PDF generation error:', e);
+    }
+
+    const message = buildLedgerMessage(selectedLedgerSupplier, ledgerHistory, filename);
     const url = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`;
     window.open(url, '_blank', 'noopener,noreferrer');
+
+    setPdfNotice(`✓ Official PDF Statement "${filename}" downloaded to device! WhatsApp is opened—attach the PDF in chat.`);
+    setTimeout(() => setPdfNotice(''), 6000);
   };
 
   const handleDirectWhatsApp = async (supplier, e) => {
@@ -204,7 +237,16 @@ export const SuppliersPage = () => {
     try {
       const res = await apiClient.get(`/suppliers/${supplier._id}/history`);
       const hist = res.data || { invoices: [], payments: [], returns: [] };
-      const message = buildLedgerMessage(supplier, hist);
+
+      // Auto generate & download PDF
+      let filename = '';
+      try {
+        filename = downloadLedgerPdf(supplier, hist, currentOutlet);
+      } catch (err) {
+        console.error('PDF generation error:', err);
+      }
+
+      const message = buildLedgerMessage(supplier, hist, filename);
 
       let cleanPhone = (supplier.phone || '').replace(/\D/g, '');
       if (cleanPhone.length === 10) {
@@ -265,6 +307,7 @@ export const SuppliersPage = () => {
         paymentTerms: '30 Days Net',
       });
       fetchSuppliers();
+      alert('Wholesaler profile registered successfully!');
     } catch (err) {
       alert(err.message);
     }
@@ -272,30 +315,34 @@ export const SuppliersPage = () => {
 
   return (
     <div className="space-y-5">
-      {/* Header */}
+      {/* Page Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-xl font-bold text-slate-900 tracking-tight">Suppliers & Pharma Wholesalers</h2>
+          <h2 className="text-xl font-bold text-slate-900 tracking-tight">Suppliers, Vendors & Khata Ledgers</h2>
           <p className="text-xs text-slate-500 mt-0.5">
-            Vendor accounts, payment terms, GST compliance, and outstanding payable credit ledgers
+            Manage pharmaceutical distributors, track purchase credit, disburse payments, and generate official PDF statements
           </p>
         </div>
         <Button variant="primary" size="sm" icon={Plus} onClick={() => setShowAddModal(true)}>
-          Add New Supplier
+          Add Wholesaler
         </Button>
       </div>
 
-      {/* Search */}
-      <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm flex items-center justify-between">
-        <div className="relative flex-1 max-w-md">
+      {/* Filter & Search Toolbar */}
+      <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+        <div className="relative flex-1 sm:max-w-md">
           <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5 pointer-events-none" />
           <input
             type="text"
-            placeholder="Search by supplier name, contact person, phone, or GSTIN..."
+            placeholder="Search by supplier name, contact person, or GSTIN..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-9 pr-3 py-1.5 text-xs text-slate-900 focus:outline-none focus:border-emerald-500"
           />
+        </div>
+
+        <div className="text-xs text-slate-500 font-medium">
+          Total Suppliers: <strong className="text-slate-900">{suppliers.length}</strong>
         </div>
       </div>
 
@@ -305,12 +352,12 @@ export const SuppliersPage = () => {
           <table className="w-full text-left text-xs min-w-[700px]">
             <thead>
               <tr className="border-b border-slate-100 bg-slate-50/70 text-slate-400 font-semibold uppercase tracking-wider text-[10px]">
-                <th className="py-3 px-4">Company Name</th>
+                <th className="py-3 px-4">Distributor Company</th>
                 <th className="py-3 px-3">Contact Person</th>
-                <th className="py-3 px-3">Contact Numbers</th>
-                <th className="py-3 px-3">GSTIN Number</th>
+                <th className="py-3 px-3">Phone & Email</th>
+                <th className="py-3 px-3">GSTIN</th>
                 <th className="py-3 px-3">Payment Terms</th>
-                <th className="py-3 px-3 text-right">Outstanding Payable</th>
+                <th className="py-3 px-3 text-right">Outstanding Khata</th>
                 <th className="py-3 px-4 text-right">Actions</th>
               </tr>
             </thead>
@@ -354,10 +401,10 @@ export const SuppliersPage = () => {
                     </td>
                     <td className="py-3 px-4 text-right">
                       <div className="flex items-center justify-end gap-1.5">
-                        {/* Send Ledger to WhatsApp Button */}
+                        {/* Send PDF Ledger to WhatsApp Button */}
                         <button
                           onClick={(e) => handleDirectWhatsApp(s, e)}
-                          title="Send Ledger Statement to Supplier's WhatsApp"
+                          title="Generate PDF Statement & Send to WhatsApp"
                           className="p-1.5 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 rounded-lg transition-colors border border-emerald-200"
                         >
                           <MessageCircle className="w-3.5 h-3.5" />
@@ -399,8 +446,8 @@ export const SuppliersPage = () => {
           selectedLedgerSupplier?.gstin || 'N/A'
         }`}
       >
-        <div className="space-y-5">
-          {/* WhatsApp Sharing Card */}
+        <div className="space-y-4">
+          {/* WhatsApp & PDF Sharing Card */}
           <div className="p-3 sm:p-4 rounded-2xl bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-50 border border-emerald-200 flex flex-col md:flex-row md:items-center justify-between gap-3">
             <div>
               <div className="flex items-center gap-2">
@@ -408,9 +455,9 @@ export const SuppliersPage = () => {
                   <MessageCircle className="w-4 h-4 fill-white" />
                 </div>
                 <div>
-                  <h4 className="text-xs font-bold text-slate-900">Send Ledger Statement via WhatsApp</h4>
+                  <h4 className="text-xs font-bold text-slate-900">Send PDF Ledger Statement via WhatsApp</h4>
                   <p className="text-[11px] text-slate-600">
-                    Instantly share reconciliation statement, outstanding due, and bill history with the supplier
+                    Generates official PDF document with invoice reconciliations and opens WhatsApp chat with statement text
                   </p>
                 </div>
               </div>
@@ -429,11 +476,21 @@ export const SuppliersPage = () => {
 
               <button
                 type="button"
+                onClick={handleDownloadPdf}
+                title="Download official PDF statement to device"
+                className="px-3 py-1.5 bg-white border border-emerald-400 hover:bg-emerald-50 text-emerald-800 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm transition-colors"
+              >
+                <Download className="w-3.5 h-3.5 text-emerald-700" />
+                Download PDF
+              </button>
+
+              <button
+                type="button"
                 onClick={() => handleSendWhatsApp(whatsappPhone)}
                 className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm shadow-emerald-600/20 transition-colors"
               >
                 <MessageCircle className="w-3.5 h-3.5 fill-white" />
-                Send WhatsApp
+                Send via WhatsApp
               </button>
 
               <button
@@ -446,6 +503,14 @@ export const SuppliersPage = () => {
               </button>
             </div>
           </div>
+
+          {/* Feedback banner */}
+          {pdfNotice && (
+            <div className="p-2.5 rounded-xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-900 font-medium flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+              <span>{pdfNotice}</span>
+            </div>
+          )}
 
           {/* Supplier Metrics */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
@@ -576,20 +641,28 @@ export const SuppliersPage = () => {
             </div>
           </div>
 
-          <div className="flex justify-between items-center pt-2 border-t border-slate-100">
+          {/* Modal Footer Controls */}
+          <div className="flex flex-wrap justify-between items-center gap-3 pt-3 border-t border-slate-100">
             <span className="text-xs text-slate-500 font-medium">
               Registered Phone: <strong className="font-mono text-slate-800">{selectedLedgerSupplier?.phone}</strong>
             </span>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <Button variant="secondary" onClick={() => setShowLedgerModal(false)}>
                 Close
+              </Button>
+              <Button
+                variant="outline"
+                icon={Download}
+                onClick={handleDownloadPdf}
+              >
+                Download PDF Ledger
               </Button>
               <Button
                 variant="primary"
                 icon={MessageCircle}
                 onClick={() => handleSendWhatsApp(whatsappPhone)}
               >
-                Send WhatsApp Statement
+                Send PDF & WhatsApp
               </Button>
             </div>
           </div>
@@ -600,8 +673,8 @@ export const SuppliersPage = () => {
       <Modal
         isOpen={showPayModal}
         onClose={() => setShowPayModal(false)}
-        title="Disburse Supplier Payment"
-        subtitle={`Wholesaler: ${selectedSupplier?.companyName} (Outstanding Due: ${formatCurrency(
+        title="Disburse Wholesaler Payment"
+        subtitle={`Supplier: ${selectedSupplier?.companyName} (Outstanding Balance: ${formatCurrency(
           selectedSupplier?.outstandingBalance
         )})`}
       >
@@ -615,24 +688,24 @@ export const SuppliersPage = () => {
           />
 
           <div>
-            <label className="text-xs font-semibold text-slate-700 block mb-1">Disbursement Channel</label>
+            <label className="text-xs font-semibold text-slate-700 block mb-1">Disbursement Mode</label>
             <select
               value={disburseMethod}
               onChange={(e) => setDisburseMethod(e.target.value)}
               className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 text-xs"
             >
-              <option value="Bank Transfer">NEFT / RTGS / Net Banking</option>
-              <option value="UPI">UPI</option>
+              <option value="Bank Transfer">Bank Transfer / NEFT</option>
+              <option value="UPI">UPI (Business QR / VPA)</option>
               <option value="Cheque">Bank Cheque</option>
-              <option value="Cash">Cash Counter</option>
+              <option value="Cash">Physical Cash Drawer</option>
             </select>
           </div>
 
           <Input
-            label="UTR / Cheque / Reference Number"
+            label="Transaction Reference / Cheque No"
             value={disburseNotes}
             onChange={(e) => setDisburseNotes(e.target.value)}
-            placeholder="e.g. UTR-HDFC98129031"
+            placeholder="e.g. UTR #98218721 or Cheque #000214"
           />
 
           <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
@@ -646,64 +719,75 @@ export const SuppliersPage = () => {
         </form>
       </Modal>
 
-      {/* Add Supplier Modal */}
+      {/* Register Supplier Modal */}
       <Modal
         isOpen={showAddModal}
         onClose={() => setShowAddModal(false)}
-        title="Add Pharma Wholesaler / Distributor"
-        subtitle="Configure supplier account, GSTIN, and credit terms"
+        title="Register Pharmaceutical Wholesaler"
+        subtitle="Create distributor profile, payment terms, and credit Khata tracking"
       >
         <form onSubmit={handleAddSubmit} className="space-y-3">
           <Input
-            label="Wholesaler Company Name"
+            label="Wholesaler / Company Name"
             value={newSupplier.companyName}
             onChange={(e) => setNewSupplier({ ...newSupplier, companyName: e.target.value })}
-            placeholder="e.g. Apex Pharma Distributors"
+            placeholder="e.g. MedPlus Pharma Distributors"
             required
           />
-          <div className="grid grid-cols-2 gap-3">
-            <Input
-              label="Contact Person"
-              value={newSupplier.contactPerson}
-              onChange={(e) => setNewSupplier({ ...newSupplier, contactPerson: e.target.value })}
-              placeholder="e.g. Rajesh Shah"
-            />
-            <Input
-              label="Phone Number"
-              value={newSupplier.phone}
-              onChange={(e) => setNewSupplier({ ...newSupplier, phone: e.target.value })}
-              placeholder="e.g. 9845012345"
-              required
-            />
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <Input
-              label="Email Address"
-              type="email"
-              value={newSupplier.email}
-              onChange={(e) => setNewSupplier({ ...newSupplier, email: e.target.value })}
-              placeholder="orders@apexpharma.in"
-            />
-            <Input
-              label="GSTIN Number"
-              value={newSupplier.gstin}
-              onChange={(e) => setNewSupplier({ ...newSupplier, gstin: e.target.value.toUpperCase() })}
-              placeholder="29AAAAA0000A1Z5"
-            />
-          </div>
           <Input
-            label="Warehouse / Depot Address"
+            label="Contact Person Name"
+            value={newSupplier.contactPerson}
+            onChange={(e) => setNewSupplier({ ...newSupplier, contactPerson: e.target.value })}
+            placeholder="e.g. Vikas Sharma"
+          />
+          <Input
+            label="Phone Number (WhatsApp Enabled)"
+            value={newSupplier.phone}
+            onChange={(e) => setNewSupplier({ ...newSupplier, phone: e.target.value })}
+            placeholder="e.g. 9845012345"
+            required
+          />
+          <Input
+            label="Email Address"
+            type="email"
+            value={newSupplier.email}
+            onChange={(e) => setNewSupplier({ ...newSupplier, email: e.target.value })}
+            placeholder="orders@medpluspharma.com"
+          />
+          <Input
+            label="Business Address"
             value={newSupplier.address}
             onChange={(e) => setNewSupplier({ ...newSupplier, address: e.target.value })}
-            placeholder="e.g. Plot 12, APMC Yard, Yeshwanthpur"
+            placeholder="e.g. #45, Wholesale Drug Market, Chickpet"
           />
+          <Input
+            label="GSTIN Number"
+            value={newSupplier.gstin}
+            onChange={(e) => setNewSupplier({ ...newSupplier, gstin: e.target.value })}
+            placeholder="29AAAAA0000A1Z5"
+          />
+          <div>
+            <label className="text-xs font-semibold text-slate-700 block mb-1">Standard Payment Terms</label>
+            <select
+              value={newSupplier.paymentTerms}
+              onChange={(e) => setNewSupplier({ ...newSupplier, paymentTerms: e.target.value })}
+              className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2 text-xs"
+            >
+              <option value="Immediate">Immediate / Advance Cash</option>
+              <option value="7 Days Net">7 Days Net</option>
+              <option value="15 Days Net">15 Days Net</option>
+              <option value="30 Days Net">30 Days Net</option>
+              <option value="45 Days Net">45 Days Net</option>
+              <option value="60 Days Net">60 Days Net</option>
+            </select>
+          </div>
 
           <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
             <Button variant="secondary" type="button" onClick={() => setShowAddModal(false)}>
               Cancel
             </Button>
             <Button variant="primary" type="submit">
-              Save Wholesaler
+              Register Wholesaler
             </Button>
           </div>
         </form>

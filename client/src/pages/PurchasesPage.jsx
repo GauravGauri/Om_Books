@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Truck,
   Plus,
@@ -10,6 +10,10 @@ import {
   AlertCircle,
   Trash2,
   ArrowDownLeft,
+  X,
+  Package,
+  Layers,
+  ChevronDown,
 } from 'lucide-react';
 import apiClient from '../api/client';
 import { useAuthStore } from '../store/useAuthStore';
@@ -18,6 +22,24 @@ import { Button } from '../components/common/Button';
 import { Input } from '../components/common/Input';
 import { Badge } from '../components/common/Badge';
 import { Modal } from '../components/common/Modal';
+
+const PACKAGING_PRESETS = [
+  'Strip of 10 Tablets',
+  'Strip of 15 Tablets',
+  'Strip of 10 Capsules',
+  'Syrup of 100ml',
+  'Syrup of 60ml',
+  'Syrup of 200ml',
+  'Vial of 10ml',
+  'Ampoule of 2ml',
+  'Bottle of 60 Tablets',
+  'Tube of 15g Ointment',
+  'Tube of 20g Gel',
+  'Drops of 15ml',
+  'Suspension of 60ml',
+  'Box of 100 Units',
+  'Pack of 1 Device',
+];
 
 export const PurchasesPage = () => {
   const { currentOutlet } = useAuthStore();
@@ -36,14 +58,20 @@ export const PurchasesPage = () => {
   const [paidAmount, setPaidAmount] = useState(0);
   const [paymentMethod, setPaymentMethod] = useState('Bank Transfer');
 
-  // Item row input buffer
+  // Searchable Medicine Dropdown & Item Row Buffer
+  const [medicineSearchQuery, setMedicineSearchQuery] = useState('');
+  const [isMedicineDropdownOpen, setIsMedicineDropdownOpen] = useState(false);
+  const [selectedProduct, setSelectedProduct] = useState(null);
   const [selectedProductId, setSelectedProductId] = useState('');
   const [batchNumber, setBatchNumber] = useState('');
+  const [packSize, setPackSize] = useState('Strip of 10 Tablets');
   const [expiryDate, setExpiryDate] = useState('');
   const [qty, setQty] = useState(50);
   const [purchasePrice, setPurchasePrice] = useState(25);
   const [mrp, setMrp] = useState(35);
   const [sellingPrice, setSellingPrice] = useState(30);
+
+  const dropdownRef = useRef(null);
 
   useEffect(() => {
     fetchSuppliers();
@@ -53,6 +81,17 @@ export const PurchasesPage = () => {
   useEffect(() => {
     fetchInvoices();
   }, [pagination.page, currentOutlet]);
+
+  // Click outside listener for medicine search dropdown
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setIsMedicineDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const fetchSuppliers = async () => {
     try {
@@ -66,13 +105,11 @@ export const PurchasesPage = () => {
 
   const fetchProducts = async () => {
     try {
-      const res = await apiClient.get('/products', { params: { limit: 100 } });
-      setProducts(res.products || []);
-      if (res.products?.length > 0) {
-        setSelectedProductId(res.products[0]._id);
-        setPurchasePrice(res.products[0].purchasePrice);
-        setMrp(res.products[0].mrp);
-        setSellingPrice(res.products[0].sellingPrice);
+      const res = await apiClient.get('/products', { params: { limit: 150 } });
+      const prods = res.products || [];
+      setProducts(prods);
+      if (prods.length > 0 && !selectedProductId) {
+        handleSelectProduct(prods[0]);
       }
     } catch (e) {
       console.error(e);
@@ -98,18 +135,30 @@ export const PurchasesPage = () => {
     }
   };
 
-  const handleProductSelectChange = (pid) => {
-    setSelectedProductId(pid);
-    const prod = products.find((p) => p._id === pid);
-    if (prod) {
-      setPurchasePrice(prod.purchasePrice);
-      setMrp(prod.mrp);
-      setSellingPrice(prod.sellingPrice);
-    }
+  const handleSelectProduct = (prod) => {
+    setSelectedProduct(prod);
+    setSelectedProductId(prod._id);
+    setMedicineSearchQuery(prod.name);
+    setPurchasePrice(prod.purchasePrice || 0);
+    setMrp(prod.mrp || 0);
+    setSellingPrice(prod.sellingPrice || 0);
+    setPackSize(prod.packSize || prod.uom || 'Strip of 10 Tablets');
+    setIsMedicineDropdownOpen(false);
   };
 
+  const filteredProducts = products.filter((p) => {
+    if (!medicineSearchQuery) return true;
+    const q = medicineSearchQuery.toLowerCase().trim();
+    return (
+      (p.name && p.name.toLowerCase().includes(q)) ||
+      (p.genericName && p.genericName.toLowerCase().includes(q)) ||
+      (p.brand && p.brand.toLowerCase().includes(q)) ||
+      (p.sku && p.sku.toLowerCase().includes(q))
+    );
+  });
+
   const handleAddItemToInward = () => {
-    const prod = products.find((p) => p._id === selectedProductId);
+    const prod = products.find((p) => p._id === selectedProductId) || selectedProduct;
     if (!prod || !batchNumber || !expiryDate) {
       alert('Please fill in product, batch number, and expiry date.');
       return;
@@ -121,6 +170,8 @@ export const PurchasesPage = () => {
     const newItem = {
       product: prod._id,
       productName: prod.name,
+      genericName: prod.genericName,
+      packSize: (packSize || prod.packSize || 'Strip of 10 Tablets').trim(),
       batchNumber: batchNumber.toUpperCase().trim(),
       expiryDate,
       quantity: Number(qty),
@@ -134,6 +185,7 @@ export const PurchasesPage = () => {
 
     setInwardItems([...inwardItems, newItem]);
     setBatchNumber('');
+    // Keep packSize, qty ready for next entry
   };
 
   const handleRemoveInwardItem = (index) => {
@@ -162,71 +214,79 @@ export const PurchasesPage = () => {
       setInwardItems([]);
       setSupplierBillNo('');
       setPaidAmount(0);
+      setInwardDiscount(0);
       fetchInvoices();
+      alert('Goods received, batches generated, and supplier ledger updated successfully!');
     } catch (err) {
       alert(err.message);
     }
   };
 
+  // Calculations for Inward Modal
   const inwardSubtotal = inwardItems.reduce((acc, it) => acc + it.quantity * it.purchasePrice, 0);
   const inwardTax = inwardItems.reduce((acc, it) => acc + it.taxAmount, 0);
-  const inwardGrandTotal = Math.round(inwardSubtotal + inwardTax - Number(inwardDiscount || 0));
+  const inwardGrandTotal = Math.max(0, Math.round(inwardSubtotal + inwardTax - inwardDiscount));
 
   return (
     <div className="space-y-5">
-      {/* Header */}
+      {/* Page Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-xl font-bold text-slate-900 tracking-tight">Purchase Orders & Goods Inward</h2>
+          <h2 className="text-xl font-bold text-slate-900 tracking-tight">Purchases & Inward Goods (GRN)</h2>
           <p className="text-xs text-slate-500 mt-0.5">
-            Receive pharmaceutical consignments, generate batch stocks, and update wholesaler ledgers
+            Log supplier delivery challans, inward batch stocks, and reconcile accounts payable
           </p>
         </div>
         <Button variant="primary" size="sm" icon={Plus} onClick={() => setShowInwardModal(true)}>
-          Receive Goods (Inward Bill)
+          Receive Goods (GRN)
         </Button>
       </div>
 
-      {/* Invoices Table */}
+      {/* Inward Invoices Ledger Table */}
       <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
+        <div className="p-4 border-b border-slate-100 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Truck className="w-4 h-4 text-emerald-600" />
+            <h3 className="text-sm font-bold text-slate-900">Purchase Invoices & Consignments</h3>
+          </div>
+          <Badge variant="primary">{pagination.total} Recorded</Badge>
+        </div>
+
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs min-w-[700px]">
             <thead>
               <tr className="border-b border-slate-100 bg-slate-50/70 text-slate-400 font-semibold uppercase tracking-wider text-[10px]">
-                <th className="py-3 px-4">Invoice / Bill No</th>
-                <th className="py-3 px-3">Supplier / Wholesaler</th>
+                <th className="py-3 px-4">GRN No</th>
+                <th className="py-3 px-3">Supplier Invoice</th>
+                <th className="py-3 px-3">Wholesaler</th>
                 <th className="py-3 px-3">Date</th>
-                <th className="py-3 px-3 text-right">Subtotal</th>
-                <th className="py-3 px-3 text-right">GST Tax</th>
+                <th className="py-3 px-3 text-right">Taxable</th>
+                <th className="py-3 px-3 text-right">GST</th>
                 <th className="py-3 px-3 text-right">Grand Total</th>
                 <th className="py-3 px-3 text-right">Paid</th>
-                <th className="py-3 px-4 text-center">Payment Status</th>
+                <th className="py-3 px-4 text-center">Khata Status</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
               {isLoading ? (
                 <tr>
-                  <td colSpan="8" className="py-8 text-center text-slate-400">
+                  <td colSpan="9" className="py-8 text-center text-slate-400">
                     Loading purchase records...
                   </td>
                 </tr>
               ) : invoices.length === 0 ? (
                 <tr>
-                  <td colSpan="8" className="py-8 text-center text-slate-400">
-                    No purchase inward invoices recorded yet.
+                  <td colSpan="9" className="py-8 text-center text-slate-400">
+                    No inward goods recorded yet. Click "Receive Goods (GRN)" to begin.
                   </td>
                 </tr>
               ) : (
                 invoices.map((inv) => (
                   <tr key={inv._id} className="hover:bg-slate-50/80 transition-colors">
-                    <td className="py-3 px-4">
-                      <span className="font-bold text-slate-900 block font-mono">{inv.invoiceNumber}</span>
-                      {inv.supplierInvoiceNumber && (
-                        <span className="text-[10px] text-slate-400">Bill Ref: {inv.supplierInvoiceNumber}</span>
-                      )}
-                    </td>
+                    <td className="py-3 px-4 font-mono font-bold text-slate-900">{inv.invoiceNumber}</td>
+                    <td className="py-3 px-3 font-mono text-slate-700">{inv.supplierInvoiceNumber || 'N/A'}</td>
                     <td className="py-3 px-3">
-                      <span className="font-semibold text-slate-900 block">{inv.supplier?.companyName}</span>
+                      <span className="font-bold text-slate-900 block">{inv.supplier?.companyName}</span>
                       <span className="text-[10px] text-slate-400 font-mono">GSTIN: {inv.supplier?.gstin || 'N/A'}</span>
                     </td>
                     <td className="py-3 px-3 text-slate-600">{formatDate(inv.createdAt)}</td>
@@ -265,7 +325,7 @@ export const PurchasesPage = () => {
         onClose={() => setShowInwardModal(false)}
         maxWidth="max-w-4xl"
         title="Purchase Inward & Goods Receipt (GRN)"
-        subtitle="Inward incoming medicine consignments, enter batches, and update wholesaler ledger"
+        subtitle="Inward incoming medicine consignments, enter batches, packaging, and update wholesaler ledger"
       >
         <form onSubmit={handleInwardSubmit} className="space-y-4">
           {/* Top metadata */}
@@ -306,39 +366,139 @@ export const PurchasesPage = () => {
 
           {/* Add Item Row Buffer */}
           <div className="p-3.5 rounded-xl border border-emerald-200 bg-emerald-50/20 space-y-3">
-            <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider">Add Medicine Consignment Item</h4>
-            <div className="grid grid-cols-1 sm:grid-cols-3 md:grid-cols-4 gap-2.5">
-              <div className="sm:col-span-2">
-                <label className="text-xs font-semibold text-slate-700 block mb-1">Medicine Name</label>
-                <select
-                  value={selectedProductId}
-                  onChange={(e) => handleProductSelectChange(e.target.value)}
-                  className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs text-slate-800"
-                >
-                  {products.map((p) => (
-                    <option key={p._id} value={p._id}>
-                      {p.name} ({p.genericName})
-                    </option>
-                  ))}
-                </select>
+            <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
+              <Package className="w-3.5 h-3.5 text-emerald-600" />
+              Add Medicine Consignment Item
+            </h4>
+
+            {/* Row 1: Searchable Medicine Dropdown, Batch Number, Packaging, Expiry */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
+              {/* Searchable Medicine Dropdown */}
+              <div className="relative" ref={dropdownRef}>
+                <label className="text-xs font-semibold text-slate-700 block mb-1">
+                  Medicine Name <span className="text-emerald-600">* (Search & Select)</span>
+                </label>
+                <div className="relative">
+                  <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5 pointer-events-none" />
+                  <input
+                    type="text"
+                    value={medicineSearchQuery}
+                    placeholder="Type to search medicine..."
+                    onFocus={() => setIsMedicineDropdownOpen(true)}
+                    onChange={(e) => {
+                      setMedicineSearchQuery(e.target.value);
+                      setIsMedicineDropdownOpen(true);
+                    }}
+                    className="w-full bg-white border border-slate-200 rounded-lg pl-8 pr-7 py-1.5 text-xs text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500"
+                  />
+                  {medicineSearchQuery && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMedicineSearchQuery('');
+                        setIsMedicineDropdownOpen(true);
+                      }}
+                      className="absolute right-2 top-2 text-slate-400 hover:text-slate-600"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+
+                {/* Dropdown Results Menu */}
+                {isMedicineDropdownOpen && (
+                  <div className="absolute z-30 left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl max-h-56 overflow-y-auto divide-y divide-slate-100">
+                    {filteredProducts.length === 0 ? (
+                      <div className="p-3 text-center text-xs text-slate-400">
+                        No medicines found matching "{medicineSearchQuery}".
+                      </div>
+                    ) : (
+                      filteredProducts.map((p) => (
+                        <div
+                          key={p._id}
+                          onClick={() => handleSelectProduct(p)}
+                          className={`p-2.5 hover:bg-emerald-50 cursor-pointer flex justify-between items-center text-xs transition-colors ${
+                            selectedProductId === p._id ? 'bg-emerald-50/70 border-l-2 border-emerald-600' : ''
+                          }`}
+                        >
+                          <div className="min-w-0 pr-2">
+                            <p className="font-bold text-slate-900 truncate">{p.name}</p>
+                            <p className="text-[10px] text-slate-500 truncate">{p.genericName}</p>
+                            <div className="flex items-center gap-1.5 text-[9px] text-slate-400 mt-0.5">
+                              <span className="bg-slate-100 text-slate-600 px-1.5 py-0.2 rounded">
+                                {p.packSize || p.uom || 'Strip'}
+                              </span>
+                              <span>•</span>
+                              <span>Cost: ₹{p.purchasePrice}</span>
+                              <span>•</span>
+                              <span>MRP: ₹{p.mrp}</span>
+                            </div>
+                          </div>
+                          <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-100/60 px-2 py-0.5 rounded-full shrink-0">
+                            Select
+                          </span>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                )}
               </div>
 
-              <Input
-                label="Batch Number"
-                value={batchNumber}
-                onChange={(e) => setBatchNumber(e.target.value)}
-                placeholder="e.g. BATCH-01"
-              />
+              {/* Batch Number */}
+              <div>
+                <label className="text-xs font-semibold text-slate-700 block mb-1">
+                  Batch Number <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={batchNumber}
+                  onChange={(e) => setBatchNumber(e.target.value.toUpperCase())}
+                  placeholder="e.g. BATCH-2026A"
+                  className="w-full bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-xs text-slate-900 font-mono font-bold uppercase focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500"
+                />
+              </div>
 
+              {/* Packaging / Pack Size Option */}
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-xs font-semibold text-slate-700 flex items-center gap-1">
+                    <Layers className="w-3 h-3 text-emerald-600" />
+                    Packaging / Pack Size
+                  </label>
+                  <select
+                    onChange={(e) => {
+                      if (e.target.value) setPackSize(e.target.value);
+                    }}
+                    className="text-[10px] text-emerald-700 bg-emerald-50 border border-emerald-200 rounded px-1 py-0.5"
+                  >
+                    <option value="">Presets...</option>
+                    {PACKAGING_PRESETS.map((pst, idx) => (
+                      <option key={idx} value={pst}>
+                        {pst}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <input
+                  type="text"
+                  value={packSize}
+                  onChange={(e) => setPackSize(e.target.value)}
+                  placeholder="e.g. Strip of 10 Tablets or Syrup of 100ml"
+                  className="w-full bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-xs text-slate-900 focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500"
+                />
+              </div>
+
+              {/* Expiry Date */}
               <Input
-                label="Expiry Date"
+                label="Expiry Date *"
                 type="date"
                 value={expiryDate}
                 onChange={(e) => setExpiryDate(e.target.value)}
               />
             </div>
 
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2.5 items-end">
+            {/* Row 2: Quantities, Prices & Add Button */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2.5 items-end pt-1">
               <Input
                 label="Quantity Inward"
                 type="number"
@@ -376,10 +536,11 @@ export const PurchasesPage = () => {
 
           {/* Staged Items List */}
           <div className="border border-slate-200 rounded-xl overflow-x-auto">
-            <table className="w-full text-left text-xs min-w-[550px]">
+            <table className="w-full text-left text-xs min-w-[650px]">
               <thead className="bg-slate-50 text-slate-500 font-semibold text-[10px] uppercase">
                 <tr>
                   <th className="p-2.5">Medicine</th>
+                  <th className="p-2.5">Packaging</th>
                   <th className="p-2.5">Batch</th>
                   <th className="p-2.5">Expiry</th>
                   <th className="p-2.5 text-right">Qty</th>
@@ -391,15 +552,20 @@ export const PurchasesPage = () => {
               <tbody className="divide-y divide-slate-100">
                 {inwardItems.length === 0 ? (
                   <tr>
-                    <td colSpan="7" className="p-4 text-center text-slate-400">
-                      No items staged for inward yet. Fill above and click + Add Item.
+                    <td colSpan="8" className="p-4 text-center text-slate-400">
+                      No items staged for inward yet. Select medicine above and click "+ Add Item".
                     </td>
                   </tr>
                 ) : (
                   inwardItems.map((item, idx) => (
                     <tr key={idx}>
                       <td className="p-2.5 font-bold text-slate-900">{item.productName}</td>
-                      <td className="p-2.5 font-mono">{item.batchNumber}</td>
+                      <td className="p-2.5">
+                        <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200">
+                          {item.packSize || 'Strip of 10 Tablets'}
+                        </span>
+                      </td>
+                      <td className="p-2.5 font-mono font-bold text-slate-800">{item.batchNumber}</td>
                       <td className="p-2.5 text-slate-500">{formatDate(item.expiryDate)}</td>
                       <td className="p-2.5 text-right font-medium">{item.quantity}</td>
                       <td className="p-2.5 text-right font-mono">{formatCurrency(item.purchasePrice)}</td>
