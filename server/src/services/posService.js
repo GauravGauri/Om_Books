@@ -6,12 +6,36 @@ import {
   Product,
   Payment,
   Notification,
+  Outlet,
 } from '../models/index.js';
 import { logAudit } from '../middleware/auth.js';
 
 export const checkoutPOS = async (data, user, req) => {
+  let outletId = data.outlet || data.outletId;
+  if (!outletId && user?.outlets && user.outlets.length > 0) {
+    outletId = user.outlets[0]._id || user.outlets[0];
+  }
+  if (!outletId) {
+    const defaultOutlet = await Outlet.findOne({ isActive: true });
+    outletId = defaultOutlet?._id;
+  }
+  if (!outletId) {
+    let anyOutlet = await Outlet.findOne({});
+    if (!anyOutlet) {
+      anyOutlet = await Outlet.create({
+        name: 'HomeBooks Central Pharmacy',
+        code: 'OUT-MAIN',
+        address: '100 Feet Rd, Indiranagar',
+        city: 'Bengaluru',
+        isMain: true,
+      });
+    }
+    outletId = anyOutlet._id;
+  }
+
+  const outlet = outletId;
+
   const {
-    outlet,
     customer: customerId,
     customerName = 'Walk-in Customer',
     customerPhone,
@@ -101,7 +125,7 @@ export const checkoutPOS = async (data, user, req) => {
       product: batch.product._id,
       productName: batch.product.name,
       genericName: batch.product.genericName,
-      hsnCode: batch.product.hsnCode,
+      hsnCode: item.hsnCode || batch.product.hsnCode || '3004',
       batch: batch._id,
       batchNumber: batch.batchNumber,
       expiryDate: batch.expiryDate,
@@ -109,14 +133,13 @@ export const checkoutPOS = async (data, user, req) => {
       unitPrice,
       mrp: batch.mrp,
       discountPercent: discountPct,
-      discountAmount: itemDiscount,
+      taxableAmount,
       gstRate,
-      taxableAmount: Math.round(taxableAmount * 100) / 100,
       taxAmount: itemTax,
       totalAmount: lineTotal,
     });
 
-    // Check if total product stock is below minimum level
+    // Check low stock threshold & trigger notification
     const totalRemaining = await InventoryBatch.aggregate([
       { $match: { product: batch.product._id, outlet, availableQuantity: { $gt: 0 } } },
       { $group: { _id: null, total: { $sum: '$availableQuantity' } } },
@@ -168,33 +191,18 @@ export const checkoutPOS = async (data, user, req) => {
     cashier: user._id,
   });
 
-  // Handle Customer updates: Khata credit balance and Loyalty points
+  // If customer khata credit used, update customer ledger balance & loyalty points
   if (customerId) {
-    const customer = await Customer.findById(customerId);
-    if (customer) {
-      // If credit sale, update outstanding balance
+    const customerRecord = await Customer.findById(customerId);
+    if (customerRecord) {
+      const earnedPoints = Math.floor(grandTotal / 100); // 1 pt per ₹100
+      customerRecord.loyaltyPoints = (customerRecord.loyaltyPoints || 0) + earnedPoints;
+
       if (paymentMethod === 'Credit' || (paymentBreakdown.credit && paymentBreakdown.credit > 0)) {
         const creditAmt = paymentMethod === 'Credit' ? grandTotal : paymentBreakdown.credit;
-        customer.outstandingBalance += creditAmt;
+        customerRecord.outstandingBalance = (customerRecord.outstandingBalance || 0) + creditAmt;
       }
-      // Add loyalty points (1 point per ₹100 spent)
-      const earnedPoints = Math.floor(grandTotal / 100);
-      customer.loyaltyPoints += earnedPoints;
-
-      // Update refill dates for chronic medicine items
-      for (const item of processedItems) {
-        const existingRefill = customer.refillReminders.find(
-          (r) => r.product && r.product.toString() === item.product.toString()
-        );
-        const nextDate = new Date();
-        nextDate.setDate(nextDate.getDate() + 30); // 30-day default cycle
-        if (existingRefill) {
-          existingRefill.lastPurchasedDate = now;
-          existingRefill.nextRefillDate = nextDate;
-        }
-      }
-
-      await customer.save();
+      await customerRecord.save();
     }
   }
 

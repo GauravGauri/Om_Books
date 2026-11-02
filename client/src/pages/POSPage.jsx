@@ -31,7 +31,7 @@ import { Modal } from '../components/common/Modal';
 import { ThermalReceipt } from '../components/common/ThermalReceipt';
 
 export const POSPage = () => {
-  const { currentOutlet } = useAuthStore();
+  const { currentOutlet, user } = useAuthStore();
   const {
     items,
     addItem,
@@ -240,8 +240,10 @@ export const POSPage = () => {
 
     try {
       const totals = getTotals();
+      const outletIdToUse = currentOutlet?._id || user?.outlets?.[0]?._id || user?.outlets?.[0];
       const payload = {
-        outletId: currentOutlet?._id,
+        outlet: outletIdToUse,
+        outletId: outletIdToUse,
         customerId: customer?._id,
         customerName: customer ? customer.name : 'Walk-in Customer',
         customerPhone: customer?.phone,

@@ -59,8 +59,14 @@ export const useAuthStore = create((set, get) => ({
     if (!token) return;
     try {
       const response = await apiClient.get('/auth/me');
-      set({ user: response.data });
-      localStorage.setItem('hb_user', JSON.stringify(response.data));
+      const user = response.data;
+      let outlet = get().currentOutlet || JSON.parse(localStorage.getItem('hb_outlet') || 'null');
+      if (!outlet && user.outlets && user.outlets.length > 0) {
+        outlet = user.outlets[0];
+        localStorage.setItem('hb_outlet', JSON.stringify(outlet));
+      }
+      set({ user, currentOutlet: outlet });
+      localStorage.setItem('hb_user', JSON.stringify(user));
     } catch (err) {
       get().logout();
     }

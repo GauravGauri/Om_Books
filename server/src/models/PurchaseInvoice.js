@@ -6,6 +6,16 @@ const purchaseInvoiceItemSchema = new mongoose.Schema({
     ref: 'Product',
     required: true,
   },
+  itemType: {
+    type: String,
+    trim: true,
+    default: 'Tablet',
+  },
+  hsnCode: {
+    type: String,
+    trim: true,
+    default: '3004',
+  },
   batchNumber: {
     type: String,
     required: true,
@@ -46,6 +56,10 @@ const purchaseInvoiceItemSchema = new mongoose.Schema({
     required: true,
     min: 0,
   },
+  discountPercent: {
+    type: Number,
+    default: 0,
+  },
   gstRate: {
     type: Number,
     default: 12,
@@ -72,6 +86,15 @@ const purchaseInvoiceSchema = new mongoose.Schema(
       unique: true,
       trim: true,
     },
+    purchaseType: {
+      type: String,
+      enum: ['Invoice', 'Delivery Challan'],
+      default: 'Invoice',
+    },
+    billHasGst: {
+      type: Boolean,
+      default: true,
+    },
     supplierInvoiceNumber: {
       type: String,
       trim: true,
@@ -93,6 +116,9 @@ const purchaseInvoiceSchema = new mongoose.Schema(
     invoiceDate: {
       type: Date,
       default: Date.now,
+    },
+    dueDate: {
+      type: Date,
     },
     items: [purchaseInvoiceItemSchema],
     subtotal: {

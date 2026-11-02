@@ -7,6 +7,7 @@ import {
   Supplier,
   Payment,
   Product,
+  Outlet,
 } from '../models/index.js';
 import { logAudit } from '../middleware/auth.js';
 
@@ -34,12 +35,38 @@ export const createPurchaseOrder = async (data, user, req) => {
 };
 
 export const receiveGoodsInvoice = async (data, user, req) => {
+  let outletId = data.outlet || data.outletId;
+  if (!outletId && user?.outlets && user.outlets.length > 0) {
+    outletId = user.outlets[0]._id || user.outlets[0];
+  }
+  if (!outletId) {
+    const defaultOutlet = await Outlet.findOne({ isActive: true });
+    outletId = defaultOutlet?._id;
+  }
+  if (!outletId) {
+    let anyOutlet = await Outlet.findOne({});
+    if (!anyOutlet) {
+      anyOutlet = await Outlet.create({
+        name: 'HomeBooks Central Pharmacy',
+        code: 'OUT-MAIN',
+        address: '100 Feet Rd, Indiranagar',
+        city: 'Bengaluru',
+        isMain: true,
+      });
+    }
+    outletId = anyOutlet._id;
+  }
+
+  const outlet = outletId;
+
   const {
     supplier,
-    outlet,
     supplierInvoiceNumber,
     purchaseOrder,
     items,
+    purchaseType = 'Invoice',
+    billHasGst = true,
+    dueDate,
     discount = 0,
     paidAmount = 0,
     paymentMethod = 'Bank Transfer',
@@ -58,11 +85,19 @@ export const receiveGoodsInvoice = async (data, user, req) => {
   const processedItems = [];
 
   for (const item of items) {
-    const itemSubtotal = item.quantity * item.purchasePrice;
-    const itemTax = (itemSubtotal * (item.gstRate || 12)) / 100;
-    const itemTotal = itemSubtotal + itemTax;
+    const qty = Number(item.quantity || 1);
+    const freeQty = Number(item.freeQuantity || 0);
+    const rate = Number(item.purchasePrice || 0);
+    const discPct = Number(item.discountPercent || 0);
+    const gstRate = item.gstRate != null ? Number(item.gstRate) : 12;
 
-    subtotal += itemSubtotal;
+    const lineGross = qty * rate;
+    const itemDisc = Math.round(((lineGross * discPct) / 100) * 100) / 100;
+    const itemTaxable = lineGross - itemDisc;
+    const itemTax = Math.round(((itemTaxable * gstRate) / 100) * 100) / 100;
+    const itemTotal = Math.round((itemTaxable + itemTax) * 100) / 100;
+
+    subtotal += itemTaxable;
     totalTax += itemTax;
 
     // Create or find Inventory Batch
@@ -73,14 +108,15 @@ export const receiveGoodsInvoice = async (data, user, req) => {
     });
 
     const prevQty = batch ? batch.availableQuantity : 0;
-    const totalQty = Number(item.quantity) + Number(item.freeQuantity || 0);
+    // Total physical stock added includes both purchased and free units!
+    const totalQty = qty + freeQty;
 
     if (batch) {
       batch.quantityReceived += totalQty;
       batch.availableQuantity += totalQty;
-      batch.purchaseCost = item.purchasePrice;
-      batch.mrp = item.mrp;
-      batch.sellingPrice = item.sellingPrice;
+      batch.purchaseCost = rate;
+      batch.mrp = Number(item.mrp || 0);
+      batch.sellingPrice = Number(item.sellingPrice || item.mrp || rate);
       batch.expiryDate = new Date(item.expiryDate);
       if (item.mfgDate) batch.mfgDate = new Date(item.mfgDate);
       batch.status = 'Available';
@@ -92,18 +128,21 @@ export const receiveGoodsInvoice = async (data, user, req) => {
         mfgDate: item.mfgDate ? new Date(item.mfgDate) : undefined,
         expiryDate: new Date(item.expiryDate),
         supplier,
-        purchaseCost: item.purchasePrice,
-        mrp: item.mrp,
-        sellingPrice: item.sellingPrice,
+        purchaseCost: rate,
+        mrp: Number(item.mrp || 0),
+        sellingPrice: Number(item.sellingPrice || item.mrp || rate),
         quantityReceived: totalQty,
         availableQuantity: totalQty,
         outlet,
       });
     }
 
-    // Update Product packSize if specified
-    if (item.packSize) {
-      await Product.findByIdAndUpdate(item.product, { packSize: item.packSize });
+    // Update Product packSize and dosageForm (itemType) if specified
+    const productUpdate = {};
+    if (item.packSize) productUpdate.packSize = item.packSize;
+    if (item.itemType) productUpdate.dosageForm = item.itemType;
+    if (Object.keys(productUpdate).length > 0) {
+      await Product.findByIdAndUpdate(item.product, productUpdate);
     }
 
     // Record Stock Movement
@@ -117,15 +156,27 @@ export const receiveGoodsInvoice = async (data, user, req) => {
       newQuantity: batch.availableQuantity,
       referenceType: 'PurchaseInvoice',
       referenceNumber: invoiceNumber,
-      remarks: `Goods received via bill ${supplierInvoiceNumber || invoiceNumber}`,
+      remarks: `Goods received via bill ${supplierInvoiceNumber || invoiceNumber} (Billed: ${qty}, Free: ${freeQty})`,
       performedBy: user._id,
     });
 
     processedItems.push({
-      ...item,
+      product: item.product,
+      productName: item.productName,
+      itemType: item.itemType || 'Tablet',
+      hsnCode: item.hsnCode || '3004',
+      batchNumber: item.batchNumber.trim().toUpperCase(),
       packSize: item.packSize || '10 Tablets / Strip',
-      taxAmount: Math.round(itemTax * 100) / 100,
-      totalAmount: Math.round(itemTotal * 100) / 100,
+      expiryDate: item.expiryDate,
+      quantity: qty,
+      freeQuantity: freeQty,
+      purchasePrice: rate,
+      mrp: Number(item.mrp || 0),
+      sellingPrice: Number(item.sellingPrice || item.mrp || rate),
+      discountPercent: discPct,
+      gstRate,
+      taxAmount: itemTax,
+      totalAmount: itemTotal,
       batchId: batch._id,
     });
   }
@@ -143,10 +194,13 @@ export const receiveGoodsInvoice = async (data, user, req) => {
 
   const purchaseInvoice = await PurchaseInvoice.create({
     invoiceNumber,
+    purchaseType,
+    billHasGst,
     supplierInvoiceNumber,
     purchaseOrder,
     supplier,
     outlet,
+    dueDate: dueDate ? new Date(dueDate) : undefined,
     items: processedItems,
     subtotal: Math.round(subtotal * 100) / 100,
     discount,
