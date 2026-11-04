@@ -38,7 +38,7 @@ export const getBatches = async ({
   const skip = (parseInt(page, 10) - 1) * parseInt(limit, 10);
 
   const batches = await InventoryBatch.find(query)
-    .populate('product', 'name genericName sku barcode uom minStockLevel mrp sellingPrice')
+    .populate('product', 'name genericName sku barcode uom minStockLevel mrp sellingPrice unitsPerPack allowLooseSale looseUnitName dosageForm packSize')
     .populate('supplier', 'companyName')
     .populate('outlet', 'name code')
     .sort({ expiryDate: 1 })

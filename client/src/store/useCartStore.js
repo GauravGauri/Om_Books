@@ -9,101 +9,222 @@ export const useCartStore = create((set, get) => ({
   paymentBreakdown: { cash: 0, upi: 0, card: 0, credit: 0 },
   customDiscountPercent: 0,
 
-  addItem: (productOrItem, batch, quantity = 1) => {
-    let item;
+  addItem: (productOrItem, batch, quantity = 1, options = {}) => {
+    let rawItem = {};
     if (batch) {
-      // Called with (product, batch, quantity)
-      item = {
+      rawItem = {
         productId: productOrItem._id || productOrItem.productId,
         productName: productOrItem.name || productOrItem.productName,
         genericName: productOrItem.genericName,
         hsnCode: productOrItem.hsnCode || '3004',
+        dosageForm: productOrItem.dosageForm || 'Tablet',
         uom: productOrItem.uom || 'Strip',
-        packSize: productOrItem.packSize || productOrItem.uom || 'Strip',
+        packSize: productOrItem.packSize || productOrItem.uom || '1x10',
+        unitsPerPack: Number(productOrItem.unitsPerPack || 10),
+        allowLooseSale: productOrItem.allowLooseSale !== undefined ? productOrItem.allowLooseSale : true,
+        looseUnitName: productOrItem.looseUnitName || (productOrItem.dosageForm === 'Capsule' ? 'Cap' : productOrItem.dosageForm === 'Respule' ? 'Respule' : 'Tab'),
         batchId: batch._id || batch.batchId,
         batchNumber: batch.batchNumber,
         expiryDate: batch.expiryDate,
         availableQuantity: batch.availableQuantity != null ? batch.availableQuantity : Infinity,
-        unitPrice: batch.sellingPrice != null ? batch.sellingPrice : (productOrItem.sellingPrice || 0),
-        mrp: batch.mrp != null ? batch.mrp : (productOrItem.mrp || 0),
+        packPrice: batch.sellingPrice != null ? batch.sellingPrice : (productOrItem.sellingPrice || 0),
+        packMrp: batch.mrp != null ? batch.mrp : (productOrItem.mrp || 0),
         gstRate: productOrItem.gstRate || 12,
         discountPercent: 0,
-        quantity: quantity || 1,
+        ...options,
       };
     } else {
-      // Called with single item object
       const payload = productOrItem;
-      item = {
+      rawItem = {
         productId: payload.productId || payload._id,
         productName: payload.productName || payload.name,
         genericName: payload.genericName,
         hsnCode: payload.hsnCode || '3004',
+        dosageForm: payload.dosageForm || 'Tablet',
         uom: payload.uom || payload.packSize || 'Strip',
-        packSize: payload.packSize || payload.uom || 'Strip',
+        packSize: payload.packSize || payload.uom || '1x10',
+        unitsPerPack: Number(payload.unitsPerPack || 10),
+        allowLooseSale: payload.allowLooseSale !== undefined ? payload.allowLooseSale : true,
+        looseUnitName: payload.looseUnitName || (payload.dosageForm === 'Capsule' ? 'Cap' : payload.dosageForm === 'Respule' ? 'Respule' : 'Tab'),
         batchId: payload.batchId || payload.batch?._id,
         batchNumber: payload.batchNumber || payload.batch?.batchNumber || 'DEFAULT',
         expiryDate: payload.expiryDate || payload.batch?.expiryDate,
         availableQuantity: payload.availableQuantity != null ? payload.availableQuantity : (payload.batch?.availableQuantity ?? Infinity),
-        unitPrice: payload.unitPrice != null ? payload.unitPrice : (payload.sellingPrice || 0),
-        mrp: payload.mrp != null ? payload.mrp : (payload.unitPrice || 0),
+        packPrice: payload.packPrice != null ? payload.packPrice : (payload.sellingPrice || payload.unitPrice || 0),
+        packMrp: payload.packMrp != null ? payload.packMrp : (payload.mrp || 0),
         gstRate: payload.gstRate != null ? payload.gstRate : 12,
         discountPercent: payload.discountPercent || 0,
-        quantity: payload.quantity || 1,
+        ...options,
       };
     }
 
+    const isLoose = Boolean(rawItem.isLoose);
+    const unitsPerPack = Math.max(1, Number(rawItem.unitsPerPack || 10));
+    const looseUnitName = rawItem.looseUnitName || (rawItem.dosageForm === 'Capsule' ? 'Cap' : rawItem.dosageForm === 'Respule' ? 'Respule' : 'Tab');
+
+    let looseQty = 0;
+    let packQty = 0;
+    let unitPrice = 0;
+    let mrp = 0;
+
+    if (isLoose) {
+      looseQty = Number(rawItem.looseQuantity || quantity || 1);
+      packQty = Math.round((looseQty / unitsPerPack) * 10000) / 10000;
+      unitPrice = Math.round((rawItem.packPrice / unitsPerPack) * 100) / 100;
+      mrp = Math.round((rawItem.packMrp / unitsPerPack) * 100) / 100;
+    } else {
+      packQty = Number(rawItem.quantity || quantity || 1);
+      looseQty = Math.round(packQty * unitsPerPack);
+      unitPrice = rawItem.packPrice;
+      mrp = rawItem.packMrp;
+    }
+
+    const item = {
+      ...rawItem,
+      id: `${rawItem.batchId}-${isLoose ? 'loose' : 'pack'}`,
+      isLoose,
+      unitsPerPack,
+      looseUnitName,
+      unitType: isLoose ? looseUnitName : (rawItem.uom || 'Strip'),
+      looseQuantity: looseQty,
+      quantity: packQty,
+      unitPrice,
+      mrp,
+    };
+
     const { items } = get();
-    const existingIndex = items.findIndex((i) => i.batchId === item.batchId);
+    const existingIndex = items.findIndex((i) => i.id === item.id);
     const avail = item.availableQuantity != null ? item.availableQuantity : Infinity;
 
     if (existingIndex > -1) {
       const existing = items[existingIndex];
-      const newQty = existing.quantity + item.quantity;
-      if (newQty > avail) {
-        throw new Error(`Cannot add more than available stock (${avail}) for batch ${item.batchNumber}`);
+      let newPackQty = 0;
+      let newLooseQty = 0;
+
+      if (isLoose) {
+        newLooseQty = existing.looseQuantity + looseQty;
+        newPackQty = Math.round((newLooseQty / unitsPerPack) * 10000) / 10000;
+      } else {
+        newPackQty = existing.quantity + packQty;
+        newLooseQty = Math.round(newPackQty * unitsPerPack);
       }
+
+      if (newPackQty > avail) {
+        throw new Error(
+          `Cannot add more than available stock (${avail} packs / ${Math.floor(avail * unitsPerPack)} ${looseUnitName}) for batch ${item.batchNumber}`
+        );
+      }
+
       const updatedItems = [...items];
       updatedItems[existingIndex] = {
         ...existing,
-        quantity: newQty,
+        quantity: newPackQty,
+        looseQuantity: newLooseQty,
       };
       set({ items: updatedItems });
     } else {
-      if (item.quantity > avail) {
-        throw new Error(`Cannot add more than available stock (${avail}) for batch ${item.batchNumber}`);
+      if (packQty > avail) {
+        throw new Error(
+          `Cannot add more than available stock (${avail} packs / ${Math.floor(avail * unitsPerPack)} ${looseUnitName}) for batch ${item.batchNumber}`
+        );
       }
       set({ items: [...items, item] });
     }
   },
 
-  updateQuantity: (batchId, quantity) => {
+  updateQuantity: (itemId, quantity) => {
     const { items } = get();
     if (quantity <= 0) {
-      get().removeItem(batchId);
+      get().removeItem(itemId);
       return;
     }
     const updated = items.map((it) => {
-      if (it.batchId === batchId) {
-        if (quantity > it.availableQuantity) {
-          throw new Error(`Only ${it.availableQuantity} units available in stock.`);
+      if (it.id === itemId || it.batchId === itemId) {
+        const unitsPerPack = Math.max(1, it.unitsPerPack || 1);
+        let newPackQty = 0;
+        let newLooseQty = 0;
+
+        if (it.isLoose) {
+          // If loose, quantity passed is number of tablets
+          newLooseQty = quantity;
+          newPackQty = Math.round((newLooseQty / unitsPerPack) * 10000) / 10000;
+        } else {
+          // If full pack, quantity passed is number of packs
+          newPackQty = quantity;
+          newLooseQty = Math.round(newPackQty * unitsPerPack);
         }
-        return { ...it, quantity };
+
+        if (newPackQty > it.availableQuantity) {
+          throw new Error(
+            `Only ${it.availableQuantity} packs (${Math.floor(it.availableQuantity * unitsPerPack)} ${it.looseUnitName || 'tabs'}) available in stock.`
+          );
+        }
+        return {
+          ...it,
+          quantity: newPackQty,
+          looseQuantity: newLooseQty,
+        };
       }
       return it;
     });
     set({ items: updated });
   },
 
-  updateItemDiscount: (batchId, discountPercent) => {
+  toggleLooseMode: (itemId) => {
+    const { items } = get();
+    const updated = items.map((it) => {
+      if (it.id === itemId || it.batchId === itemId) {
+        const willBeLoose = !it.isLoose;
+        const unitsPerPack = Math.max(1, it.unitsPerPack || 10);
+        const looseUnitName = it.looseUnitName || (it.dosageForm === 'Capsule' ? 'Cap' : it.dosageForm === 'Respule' ? 'Respule' : 'Tab');
+
+        let newPackQty = 0;
+        let newLooseQty = 0;
+        let newUnitPrice = 0;
+        let newMrp = 0;
+
+        if (willBeLoose) {
+          // Switching from pack to loose: start with 1 loose tab or equivalent
+          newLooseQty = Math.max(1, Math.min(unitsPerPack, Math.round(it.quantity * unitsPerPack)));
+          newPackQty = Math.round((newLooseQty / unitsPerPack) * 10000) / 10000;
+          newUnitPrice = Math.round((it.packPrice / unitsPerPack) * 100) / 100;
+          newMrp = Math.round((it.packMrp / unitsPerPack) * 100) / 100;
+        } else {
+          // Switching from loose to full pack
+          newPackQty = Math.max(1, Math.ceil(it.looseQuantity / unitsPerPack));
+          newLooseQty = Math.round(newPackQty * unitsPerPack);
+          newUnitPrice = it.packPrice;
+          newMrp = it.packMrp;
+        }
+
+        return {
+          ...it,
+          id: `${it.batchId}-${willBeLoose ? 'loose' : 'pack'}`,
+          isLoose: willBeLoose,
+          unitType: willBeLoose ? looseUnitName : (it.uom || 'Strip'),
+          quantity: newPackQty,
+          looseQuantity: newLooseQty,
+          unitPrice: newUnitPrice,
+          mrp: newMrp,
+        };
+      }
+      return it;
+    });
+    set({ items: updated });
+  },
+
+  updateItemDiscount: (itemId, discountPercent) => {
     const { items } = get();
     const updated = items.map((it) =>
-      it.batchId === batchId ? { ...it, discountPercent: Math.min(100, Math.max(0, discountPercent)) } : it
+      it.id === itemId || it.batchId === itemId
+        ? { ...it, discountPercent: Math.min(100, Math.max(0, discountPercent)) }
+        : it
     );
     set({ items: updated });
   },
 
-  removeItem: (batchId) => {
-    set({ items: get().items.filter((it) => it.batchId !== batchId) });
+  removeItem: (itemId) => {
+    set({ items: get().items.filter((it) => it.id !== itemId && it.batchId !== itemId) });
   },
 
   clearCart: () => {
@@ -133,7 +254,10 @@ export const useCartStore = create((set, get) => ({
     let totalTax = 0;
 
     items.forEach((item) => {
-      const gross = item.unitPrice * item.quantity;
+      const gross = item.isLoose
+        ? (item.looseQuantity || 0) * (item.unitPrice || 0)
+        : (item.quantity || 0) * (item.unitPrice || 0);
+
       const discountPct = item.discountPercent || customDiscountPercent || 0;
       const disc = (gross * discountPct) / 100;
       const taxable = gross - disc;
@@ -158,7 +282,7 @@ export const useCartStore = create((set, get) => ({
       totalTax: Math.round(totalTax * 100) / 100,
       roundOff,
       grandTotal,
-      itemCount: items.reduce((acc, it) => acc + it.quantity, 0),
+      itemCount: items.length,
     };
   },
 }));

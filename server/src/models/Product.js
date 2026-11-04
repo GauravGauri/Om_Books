@@ -48,7 +48,7 @@ const productSchema = new mongoose.Schema(
     },
     dosageForm: {
       type: String,
-      enum: ['Tablet', 'Capsule', 'Syrup', 'Injection', 'Ointment', 'Drops', 'Inhaler', 'Suspension', 'Powder', 'Other'],
+      enum: ['Tablet', 'Capsule', 'Syrup', 'Injection', 'Ointment', 'Drops', 'Inhaler', 'Suspension', 'Powder', 'Respule', 'Packet', 'Other'],
       default: 'Tablet',
     },
     strength: {
@@ -58,6 +58,20 @@ const productSchema = new mongoose.Schema(
     packSize: {
       type: String,
       default: '10 Tablets / Strip',
+    },
+    unitsPerPack: {
+      type: Number,
+      default: 10,
+      min: 1,
+    },
+    allowLooseSale: {
+      type: Boolean,
+      default: true,
+    },
+    looseUnitName: {
+      type: String,
+      default: 'Tab',
+      trim: true,
     },
     uom: {
       type: String,

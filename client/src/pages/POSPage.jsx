@@ -19,6 +19,8 @@ import {
   X,
   AlertCircle,
   Package,
+  Layers,
+  ArrowRightLeft,
 } from 'lucide-react';
 import apiClient from '../api/client';
 import { useAuthStore } from '../store/useAuthStore';
@@ -36,6 +38,7 @@ export const POSPage = () => {
     items,
     addItem,
     updateQuantity,
+    toggleLooseMode,
     updateItemDiscount,
     removeItem,
     clearCart,
@@ -57,6 +60,15 @@ export const POSPage = () => {
   const [mobileTab, setMobileTab] = useState('catalog'); // 'catalog' | 'cart'
   const [cartNotification, setCartNotification] = useState('');
 
+  // Marg ERP Dispensing Modal State (Loose vs Full Pack, Decimals)
+  const [showDispenseModal, setShowDispenseModal] = useState(false);
+  const [dispenseProduct, setDispenseProduct] = useState(null);
+  const [dispenseBatch, setDispenseBatch] = useState(null);
+  const [dispenseMode, setDispenseMode] = useState('loose'); // 'loose' | 'pack'
+  const [dispenseAllowDecimal, setDispenseAllowDecimal] = useState(true);
+  const [dispenseLooseQty, setDispenseLooseQty] = useState(1);
+  const [dispensePackQty, setDispensePackQty] = useState(1);
+
   // Substitute finder state
   const [showSubstitutes, setShowSubstitutes] = useState(false);
   const [substituteList, setSubstituteList] = useState([]);
@@ -75,6 +87,7 @@ export const POSPage = () => {
   const [checkoutError, setCheckoutError] = useState('');
 
   const searchInputRef = useRef(null);
+  const dispenseQtyInputRef = useRef(null);
 
   // Focus search input on mount and F2
   useEffect(() => {
@@ -157,27 +170,77 @@ export const POSPage = () => {
         return;
       }
 
-      addItem({
-        productId: product._id,
-        productName: product.name,
-        genericName: product.genericName,
-        hsnCode: product.hsnCode || '3004',
-        uom: product.uom || 'Strip',
-        packSize: product.packSize || product.uom || 'Strip',
-        batchId: chosenBatch._id,
-        batchNumber: chosenBatch.batchNumber,
-        expiryDate: chosenBatch.expiryDate,
-        unitPrice: chosenBatch.sellingPrice || product.sellingPrice || 0,
-        mrp: chosenBatch.mrp || product.mrp || 0,
-        gstRate: product.gstRate || 12,
-        quantity: 1,
-        availableQuantity: chosenBatch.availableQuantity,
-      });
+      // Check if medicine can be dispensed in loose units or decimals (Marg ERP flow)
+      const isLooseCandidate =
+        product.dosageForm === 'Tablet' ||
+        product.dosageForm === 'Capsule' ||
+        product.dosageForm === 'Respule' ||
+        product.allowLooseSale === true ||
+        Number(product.unitsPerPack) > 1;
 
-      setCartNotification(`✓ Added "${product.name}" to bill`);
-      setTimeout(() => setCartNotification(''), 2500);
+      if (isLooseCandidate) {
+        setDispenseProduct(product);
+        setDispenseBatch(chosenBatch);
+        const defaultLoose =
+          product.dosageForm === 'Tablet' ||
+          product.dosageForm === 'Capsule' ||
+          product.dosageForm === 'Respule' ||
+          product.allowLooseSale;
+        setDispenseMode(defaultLoose ? 'loose' : 'pack');
+        setDispenseAllowDecimal(product.allowLooseSale !== false);
+        setDispenseLooseQty(1);
+        setDispensePackQty(1);
+        setShowDispenseModal(true);
+        setTimeout(() => dispenseQtyInputRef.current?.focus(), 100);
+      } else {
+        // Direct non-loose pack sale (Syrups, Injections, Ointments, Packets)
+        addItem(product, chosenBatch, 1, {
+          isLoose: false,
+          allowLooseSale: false,
+          unitsPerPack: product.unitsPerPack || 1,
+        });
+        setCartNotification(`✓ Added "${product.name}" (1 ${product.uom || 'Pack'}) to bill`);
+        setTimeout(() => setCartNotification(''), 2500);
+      }
     } catch (err) {
       alert(err.message || 'Error adding item to billing cart');
+    }
+  };
+
+  const handleConfirmDispense = (e) => {
+    if (e) e.preventDefault();
+    if (!dispenseProduct || !dispenseBatch) return;
+
+    try {
+      const isLoose = dispenseMode === 'loose';
+      const conv = Math.max(1, Number(dispenseProduct.unitsPerPack || 10));
+      const looseUnit =
+        dispenseProduct.looseUnitName ||
+        (dispenseProduct.dosageForm === 'Capsule'
+          ? 'Cap'
+          : dispenseProduct.dosageForm === 'Respule'
+          ? 'Respule'
+          : 'Tab');
+
+      const qty = isLoose ? dispenseLooseQty : dispensePackQty;
+
+      addItem(dispenseProduct, dispenseBatch, qty, {
+        isLoose,
+        looseQuantity: isLoose ? dispenseLooseQty : dispensePackQty * conv,
+        unitsPerPack: conv,
+        allowLooseSale: dispenseAllowDecimal,
+        looseUnitName: looseUnit,
+      });
+
+      setShowDispenseModal(false);
+      setCartNotification(
+        `✓ Added "${dispenseProduct.name}" (${
+          isLoose ? `${dispenseLooseQty} ${looseUnit}` : `${dispensePackQty} Strip`
+        }) to bill`
+      );
+      setTimeout(() => setCartNotification(''), 2500);
+    } catch (err) {
+      alert(err.message);
     }
   };
 
@@ -258,7 +321,13 @@ export const POSPage = () => {
           batchId: it.batchId,
           batchNumber: it.batchNumber,
           expiryDate: it.expiryDate,
-          quantity: it.quantity,
+          isLoose: Boolean(it.isLoose),
+          unitType: it.isLoose ? it.looseUnitName || 'Tab' : it.uom || 'Strip',
+          unitsPerPack: it.unitsPerPack || 1,
+          looseQuantity: it.isLoose ? it.looseQuantity : it.quantity * (it.unitsPerPack || 1),
+          quantity: it.isLoose
+            ? Math.round((it.looseQuantity / (it.unitsPerPack || 1)) * 10000) / 10000
+            : it.quantity,
           unitPrice: it.unitPrice,
           mrp: it.mrp,
           gstRate: it.gstRate,
@@ -279,6 +348,24 @@ export const POSPage = () => {
   };
 
   const totals = getTotals();
+
+  // Dispense modal calculation helpers
+  const dispenseConv = Math.max(1, Number(dispenseProduct?.unitsPerPack || 10));
+  const dispenseLooseUnit =
+    dispenseProduct?.looseUnitName ||
+    (dispenseProduct?.dosageForm === 'Capsule'
+      ? 'Cap'
+      : dispenseProduct?.dosageForm === 'Respule'
+      ? 'Respule'
+      : 'Tab');
+  const dispensePackPrice = dispenseBatch?.sellingPrice || dispenseProduct?.sellingPrice || 0;
+  const dispenseTabPrice = Math.round((dispensePackPrice / dispenseConv) * 100) / 100;
+  const dispenseLineTotal =
+    dispenseMode === 'loose'
+      ? Math.round(dispenseTabPrice * dispenseLooseQty * 100) / 100
+      : Math.round(dispensePackPrice * dispensePackQty * 100) / 100;
+  const dispenseEquivPacks =
+    dispenseMode === 'loose' ? (dispenseLooseQty / dispenseConv).toFixed(2) : dispensePackQty;
 
   return (
     <div className="flex flex-col gap-3 min-h-[calc(100vh-100px)]">
@@ -308,44 +395,36 @@ export const POSPage = () => {
           )}
         >
           <ShoppingCart className="w-3.5 h-3.5" />
-          <span>2. Cart ({items.length}) • {formatCurrency(totals.grandTotal)}</span>
+          <span>2. Bill Cart ({items.length})</span>
+          {totals.grandTotal > 0 && <span className="font-mono">₹{totals.grandTotal}</span>}
         </button>
       </div>
 
-      {/* Main Split Layout */}
-      <div className="flex-1 flex flex-col lg:flex-row gap-5">
-        {/* LEFT COLUMN: Product Catalog & Fast Search */}
+      {/* Main Split Layout: Products Shelf on Left, Cart Terminal on Right */}
+      <div className="flex-1 flex flex-col lg:flex-row gap-3 min-h-0">
+        {/* LEFT COLUMN: Fast Medicine Search & Shelf */}
         <div
           className={cn(
-            'flex-1 flex flex-col bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden',
+            'flex-1 flex flex-col bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden min-w-0',
             mobileTab === 'cart' ? 'hidden lg:flex' : 'flex'
           )}
         >
-          {/* Search Header */}
-          <div className="p-3.5 sm:p-4 border-b border-slate-100 bg-slate-50/50 flex flex-col gap-2.5">
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
-                <ShoppingCart className="w-4 h-4 text-emerald-600" />
-                Fast Pharmacy POS Billing
-              </h3>
-              <span className="text-[11px] font-mono text-slate-500 bg-white border border-slate-200 px-2 py-0.5 rounded-md">
-                F2: Search Focus
-              </span>
-            </div>
-
+          {/* Search Header Bar */}
+          <div className="p-3 sm:p-4 border-b border-slate-100 space-y-2 bg-slate-50/50">
             <div className="relative">
               <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3 pointer-events-none" />
               <input
                 ref={searchInputRef}
                 type="text"
-                placeholder="Search Medicine name, Generic salt, SKU or scan Barcode..."
+                placeholder="Search medicine brand, generic composition or scan barcode (F2)..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 onKeyDown={handleSearchKeyDown}
-                className="w-full bg-white border border-slate-200 rounded-xl pl-10 pr-4 py-2 text-xs sm:text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-colors shadow-sm"
+                className="w-full bg-white border border-slate-200 rounded-xl pl-10 pr-10 py-2.5 text-xs sm:text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all font-medium"
               />
               {searchQuery && (
                 <button
+                  type="button"
                   onClick={() => setSearchQuery('')}
                   className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600"
                 >
@@ -393,10 +472,13 @@ export const POSPage = () => {
             )}
 
             {searchResults.map((product) => {
-              const inStock = (product.currentStock > 0) || (product.batches?.some((b) => b.availableQuantity > 0));
+              const inStock = product.currentStock > 0 || product.batches?.some((b) => b.availableQuantity > 0);
               const validBatch =
                 product.batches?.find((b) => b.availableQuantity > 0 && new Date(b.expiryDate) > new Date()) ||
                 product.batches?.find((b) => b.availableQuantity > 0);
+
+              const conv = Math.max(1, Number(product.unitsPerPack || 10));
+              const looseRate = conv > 1 ? (product.sellingPrice / conv).toFixed(2) : null;
 
               return (
                 <div
@@ -411,12 +493,25 @@ export const POSPage = () => {
                           {product.scheduleType}
                         </Badge>
                       )}
+                      {product.allowLooseSale && conv > 1 && (
+                        <span className="bg-emerald-100 text-emerald-800 text-[9px] px-1.5 py-0.2 rounded font-bold">
+                          Loose OK
+                        </span>
+                      )}
                     </div>
                     <p className="text-xs text-slate-500 truncate mt-0.5">{product.genericName}</p>
                     <div className="flex flex-wrap items-center gap-2 text-[10px] sm:text-[11px] text-slate-400 mt-1">
-                      <span>Pack: {product.packSize || product.uom || 'Strip'}</span>
+                      <span>Pack: {product.packSize || `${conv}'s`}</span>
                       <span>•</span>
                       <span>MRP: {formatCurrency(product.mrp)}</span>
+                      {looseRate && (
+                        <>
+                          <span>•</span>
+                          <span className="text-emerald-700 font-bold">
+                            ₹{looseRate}/{product.looseUnitName || 'Tab'}
+                          </span>
+                        </>
+                      )}
                       <span>•</span>
                       {validBatch ? (
                         <span className="text-slate-600 font-medium">
@@ -446,20 +541,17 @@ export const POSPage = () => {
                       <span className="text-xs sm:text-sm font-black text-slate-900 block">
                         {formatCurrency(product.sellingPrice)}
                       </span>
-                      <span
-                        className={`text-[10px] font-bold ${
-                          inStock ? 'text-emerald-700' : 'text-red-500'
-                        }`}
-                      >
+                      <span className={`text-[10px] font-bold ${inStock ? 'text-emerald-700' : 'text-red-500'}`}>
                         {product.currentStock || 0} in stock
+                        {conv > 1 && inStock && (
+                          <span className="block text-[9px] text-slate-400">
+                            ({Math.floor((product.currentStock || 0) * conv)} {product.looseUnitName || 'tabs'})
+                          </span>
+                        )}
                       </span>
                     </div>
 
-                    <Button
-                      variant="primary"
-                      size="sm"
-                      onClick={() => handleSelectMedicine(product)}
-                    >
+                    <Button variant="primary" size="sm" onClick={() => handleSelectMedicine(product)}>
                       Add
                     </Button>
                   </div>
@@ -472,7 +564,7 @@ export const POSPage = () => {
         {/* RIGHT COLUMN: POS Cart & Checkout Terminal */}
         <div
           className={cn(
-            'w-full lg:w-[460px] flex flex-col bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden shrink-0',
+            'w-full lg:w-[480px] flex flex-col bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden shrink-0',
             mobileTab === 'catalog' ? 'hidden lg:flex' : 'flex'
           )}
         >
@@ -495,7 +587,9 @@ export const POSPage = () => {
             {customer && (
               <div className="flex items-center justify-between text-[11px] text-slate-500 bg-white p-2 rounded-xl border border-slate-200">
                 <span>Phone: {customer.phone}</span>
-                <span>Khata Due: <strong>{formatCurrency(customer.outstandingBalance || 0)}</strong></span>
+                <span>
+                  Khata Due: <strong>{formatCurrency(customer.outstandingBalance || 0)}</strong>
+                </span>
               </div>
             )}
 
@@ -518,8 +612,8 @@ export const POSPage = () => {
             </div>
           </div>
 
-          {/* Cart Items List */}
-          <div className="flex-1 overflow-y-auto p-3 space-y-2 min-h-[220px] max-h-[38vh]">
+          {/* Cart Items List: Loose Tabs & Full Strip support */}
+          <div className="flex-1 overflow-y-auto p-3 space-y-2.5 min-h-[220px] max-h-[42vh]">
             {items.length === 0 ? (
               <div className="text-center py-12 text-slate-400 space-y-1">
                 <Receipt className="w-8 h-8 mx-auto text-slate-300" />
@@ -527,58 +621,114 @@ export const POSPage = () => {
                 <p className="text-[11px]">Click "Add" on any medicine to start billing</p>
               </div>
             ) : (
-              items.map((it) => (
-                <div
-                  key={it.batchId}
-                  className="p-2.5 rounded-xl border border-slate-200/90 bg-slate-50/50 flex items-center justify-between gap-2 text-xs"
-                >
-                  <div className="min-w-0 flex-1">
-                    <h5 className="font-bold text-slate-900 truncate">{it.productName}</h5>
-                    <div className="flex items-center gap-2 text-[10px] text-slate-500 mt-0.5">
-                      <span className="font-mono">B:{it.batchNumber}</span>
-                      <span>•</span>
-                      <span>MRP: {formatCurrency(it.mrp)}</span>
-                      <span>•</span>
-                      <span>Rate: {formatCurrency(it.unitPrice)}</span>
-                    </div>
-                  </div>
+              items.map((it) => {
+                const isLoose = Boolean(it.isLoose);
+                const currentQty = isLoose ? it.looseQuantity : it.quantity;
+                const unitLabel = isLoose ? it.looseUnitName || 'Tab' : it.uom || 'Strip';
+                const lineAmount = isLoose ? it.unitPrice * it.looseQuantity : it.unitPrice * it.quantity;
 
-                  <div className="flex items-center gap-2">
-                    {/* Quantity controls */}
-                    <div className="flex items-center bg-white border border-slate-200 rounded-lg overflow-hidden shadow-xs">
+                return (
+                  <div
+                    key={it.id || it.batchId}
+                    className="p-2.5 rounded-xl border border-slate-200/90 bg-slate-50/50 flex flex-col gap-1.5 text-xs"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1.5">
+                          <h5 className="font-bold text-slate-900 truncate">{it.productName}</h5>
+                          {isLoose ? (
+                            <span className="bg-emerald-100 text-emerald-800 text-[9px] px-1.5 py-0.2 rounded font-bold shrink-0">
+                              Loose Dispensed
+                            </span>
+                          ) : (
+                            <span className="bg-slate-200 text-slate-700 text-[9px] px-1.5 py-0.2 rounded font-medium shrink-0">
+                              Full {it.uom || 'Strip'}
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2 text-[10px] text-slate-500 mt-0.5">
+                          <span className="font-mono">B:{it.batchNumber}</span>
+                          <span>•</span>
+                          <span>
+                            Rate: {formatCurrency(it.unitPrice)}/{unitLabel}
+                          </span>
+                          <span>•</span>
+                          <span>MRP: {formatCurrency(it.mrp)}</span>
+                        </div>
+                      </div>
+
                       <button
                         type="button"
-                        onClick={() => updateQuantity(it.batchId, it.quantity - 1)}
-                        className="p-1 hover:bg-slate-100 text-slate-600"
+                        onClick={() => removeItem(it.id || it.batchId)}
+                        className="p-1 text-slate-400 hover:text-red-500 rounded shrink-0"
+                        title="Remove item"
                       >
-                        <Minus className="w-3 h-3" />
-                      </button>
-                      <span className="w-7 text-center font-bold text-slate-900 font-mono text-xs">
-                        {it.quantity}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => updateQuantity(it.batchId, it.quantity + 1)}
-                        className="p-1 hover:bg-slate-100 text-slate-600"
-                      >
-                        <Plus className="w-3 h-3" />
+                        <Trash2 className="w-3.5 h-3.5" />
                       </button>
                     </div>
 
-                    <span className="w-16 text-right font-mono font-bold text-slate-900">
-                      {formatCurrency(it.unitPrice * it.quantity)}
-                    </span>
+                    <div className="flex items-center justify-between pt-1 border-t border-slate-100">
+                      {/* Quantity controls */}
+                      <div className="flex items-center gap-1.5">
+                        <div className="flex items-center bg-white border border-slate-200 rounded-lg overflow-hidden shadow-xs">
+                          <button
+                            type="button"
+                            onClick={() => updateQuantity(it.id || it.batchId, currentQty - 1)}
+                            className="p-1 hover:bg-slate-100 text-slate-600"
+                          >
+                            <Minus className="w-3 h-3" />
+                          </button>
+                          <input
+                            type="number"
+                            min="1"
+                            step={isLoose ? '1' : '0.1'}
+                            value={currentQty}
+                            onChange={(e) =>
+                              updateQuantity(
+                                it.id || it.batchId,
+                                isLoose ? parseInt(e.target.value) || 1 : parseFloat(e.target.value) || 1
+                              )
+                            }
+                            className="w-10 text-center font-bold text-slate-900 font-mono text-xs border-0 p-0 focus:ring-0 focus:outline-none"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => updateQuantity(it.id || it.batchId, currentQty + 1)}
+                            className="p-1 hover:bg-slate-100 text-slate-600"
+                          >
+                            <Plus className="w-3 h-3" />
+                          </button>
+                        </div>
+                        <span className="font-bold text-slate-700 text-[11px]">{unitLabel}s</span>
 
-                    <button
-                      type="button"
-                      onClick={() => removeItem(it.batchId)}
-                      className="p-1 text-slate-400 hover:text-red-500 rounded"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
+                        {/* Switch mode toggle */}
+                        {(it.unitsPerPack > 1 || it.allowLooseSale) && (
+                          <button
+                            type="button"
+                            onClick={() => toggleLooseMode(it.id || it.batchId)}
+                            className="text-[10px] text-emerald-700 hover:text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-1.5 py-0.5 rounded flex items-center gap-1 ml-1"
+                            title={isLoose ? 'Switch to Full Strip' : 'Switch to Loose Tablets'}
+                          >
+                            <ArrowRightLeft className="w-2.5 h-2.5" />
+                            {isLoose ? 'To Strip' : 'To Loose Tabs'}
+                          </button>
+                        )}
+                      </div>
+
+                      <div className="text-right">
+                        <span className="font-mono font-black text-slate-900 text-sm">
+                          {formatCurrency(lineAmount)}
+                        </span>
+                        {isLoose && (
+                          <span className="block text-[9px] text-slate-400 font-mono">
+                            ({it.quantity} strip)
+                          </span>
+                        )}
+                      </div>
+                    </div>
                   </div>
-                </div>
-              ))
+                );
+              })
             )}
           </div>
 
@@ -672,6 +822,197 @@ export const POSPage = () => {
           </div>
         </div>
       </div>
+
+      {/* MARG ERP STYLE LOOSE / DECIMAL DISPENSING MODAL */}
+      <Modal
+        isOpen={showDispenseModal}
+        onClose={() => setShowDispenseModal(false)}
+        maxWidth="max-w-md"
+        title="Dispense Medicine (Marg ERP Flow)"
+        subtitle={`${dispenseProduct?.name || ''} (${dispenseProduct?.genericName || ''})`}
+      >
+        <form onSubmit={handleConfirmDispense} className="space-y-4">
+          {/* Stock & Batch info banner */}
+          <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 text-xs space-y-1">
+            <div className="flex justify-between font-medium">
+              <span className="text-slate-500">Selected Batch:</span>
+              <span className="font-mono font-bold text-slate-800">{dispenseBatch?.batchNumber}</span>
+            </div>
+            <div className="flex justify-between font-medium">
+              <span className="text-slate-500">Expiry Date:</span>
+              <span className="text-slate-800">{dispenseBatch ? formatDate(dispenseBatch.expiryDate) : ''}</span>
+            </div>
+            <div className="flex justify-between font-medium">
+              <span className="text-slate-500">Available Stock:</span>
+              <span className="font-bold text-emerald-700 font-mono">
+                {dispenseBatch?.availableQuantity || 0} Strips (
+                {Math.floor((dispenseBatch?.availableQuantity || 0) * dispenseConv)} {dispenseLooseUnit}s)
+              </span>
+            </div>
+          </div>
+
+          {/* Question: Can this item be sold in decimals? */}
+          <div className="p-2.5 bg-emerald-50/60 border border-emerald-200 rounded-xl">
+            <label className="flex items-center gap-2 cursor-pointer select-none text-xs text-emerald-950 font-semibold">
+              <input
+                type="checkbox"
+                checked={dispenseAllowDecimal}
+                onChange={(e) => setDispenseAllowDecimal(e.target.checked)}
+                className="rounded text-emerald-600 focus:ring-emerald-500 w-4 h-4"
+              />
+              <span>Can this item be sold in decimals / loose units? (Marg ERP)</span>
+            </label>
+            <p className="text-[10px] text-emerald-800 pl-6 mt-0.5">
+              Allows breaking strips to sell exact requested tablets (e.g. 7 tabs out of 10)
+            </p>
+          </div>
+
+          {/* Mode Selector: Loose Tablets vs Full Strip */}
+          <div>
+            <label className="text-[11px] font-bold text-slate-700 uppercase tracking-wider block mb-1.5">
+              Select Dispensing Mode
+            </label>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                disabled={!dispenseAllowDecimal}
+                onClick={() => setDispenseMode('loose')}
+                className={cn(
+                  'p-3 rounded-xl border text-left transition-all flex flex-col gap-1',
+                  dispenseMode === 'loose'
+                    ? 'border-emerald-600 bg-emerald-50/60 ring-2 ring-emerald-500/20'
+                    : 'border-slate-200 bg-white hover:bg-slate-50 opacity-90'
+                )}
+              >
+                <span className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-emerald-600 inline-block" />
+                  Loose ({dispenseLooseUnit}s)
+                </span>
+                <span className="text-xs font-bold text-emerald-700 font-mono">
+                  {formatCurrency(dispenseTabPrice)} / {dispenseLooseUnit}
+                </span>
+                <span className="text-[10px] text-slate-500">Sell exact tablets needed</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setDispenseMode('pack')}
+                className={cn(
+                  'p-3 rounded-xl border text-left transition-all flex flex-col gap-1',
+                  dispenseMode === 'pack'
+                    ? 'border-emerald-600 bg-emerald-50/60 ring-2 ring-emerald-500/20'
+                    : 'border-slate-200 bg-white hover:bg-slate-50 opacity-90'
+                )}
+              >
+                <span className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-slate-400 inline-block" />
+                  Full Strip ({dispenseConv} {dispenseLooseUnit}s)
+                </span>
+                <span className="text-xs font-bold text-slate-800 font-mono">
+                  {formatCurrency(dispensePackPrice)} / Strip
+                </span>
+                <span className="text-[10px] text-slate-500">Sell full sealed pack</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Quantity Input based on chosen mode */}
+          {dispenseMode === 'loose' ? (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-slate-800">
+                  How many {dispenseLooseUnit}s does the customer need?
+                </label>
+                <span className="text-[11px] text-slate-500">
+                  Pack has {dispenseConv} {dispenseLooseUnit}s
+                </span>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <input
+                  ref={dispenseQtyInputRef}
+                  type="number"
+                  min="1"
+                  max={Math.floor((dispenseBatch?.availableQuantity || 0) * dispenseConv)}
+                  value={dispenseLooseQty}
+                  onChange={(e) => setDispenseLooseQty(Math.max(1, parseInt(e.target.value) || 1))}
+                  className="flex-1 bg-white border border-slate-300 rounded-xl px-3 py-2 text-base font-bold text-slate-900 font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  required
+                />
+                <span className="font-bold text-slate-700 text-sm">{dispenseLooseUnit}s</span>
+              </div>
+
+              {/* Quick shortcut buttons */}
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="text-[10px] text-slate-400 font-medium">Quick:</span>
+                {[1, 2, 5, 7, 10, dispenseConv].filter((v, i, a) => a.indexOf(v) === i).map((n) => (
+                  <button
+                    key={n}
+                    type="button"
+                    onClick={() => setDispenseLooseQty(n)}
+                    className={cn(
+                      'px-2 py-0.5 rounded-lg text-xs font-semibold border transition-all',
+                      dispenseLooseQty === n
+                        ? 'bg-emerald-600 text-white border-emerald-600'
+                        : 'bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200'
+                    )}
+                  >
+                    {n} {dispenseLooseUnit}s
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-slate-800 block">
+                Number of Full Strips / Packs
+              </label>
+              <div className="flex items-center gap-2">
+                <input
+                  ref={dispenseQtyInputRef}
+                  type="number"
+                  min="1"
+                  step="1"
+                  value={dispensePackQty}
+                  onChange={(e) => setDispensePackQty(Math.max(1, parseInt(e.target.value) || 1))}
+                  className="flex-1 bg-white border border-slate-300 rounded-xl px-3 py-2 text-base font-bold text-slate-900 font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  required
+                />
+                <span className="font-bold text-slate-700 text-sm">Strips</span>
+              </div>
+            </div>
+          )}
+
+          {/* Live Calculations Preview Banner */}
+          <div className="p-3 bg-emerald-50 rounded-xl border border-emerald-200 flex items-center justify-between text-xs">
+            <div>
+              <span className="text-slate-600 block">Line Total to Bill:</span>
+              <span className="text-lg font-black text-emerald-800 font-mono">
+                {formatCurrency(dispenseLineTotal)}
+              </span>
+            </div>
+            <div className="text-right text-[11px] text-slate-500 font-mono">
+              <span>
+                Deduction: <strong>{dispenseEquivPacks}</strong> Strips
+              </span>
+              <span className="block text-[10px] text-emerald-700 font-semibold">
+                {dispenseMode === 'loose'
+                  ? `${dispenseLooseQty} ${dispenseLooseUnit}s @ ${formatCurrency(dispenseTabPrice)}`
+                  : `${dispensePackQty} Strip @ ${formatCurrency(dispensePackPrice)}`}
+              </span>
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+            <Button variant="secondary" type="button" onClick={() => setShowDispenseModal(false)}>
+              Cancel (Esc)
+            </Button>
+            <Button variant="primary" type="submit" className="font-bold">
+              Add {dispenseMode === 'loose' ? `${dispenseLooseQty} ${dispenseLooseUnit}s` : `${dispensePackQty} Strip`} to Bill
+            </Button>
+          </div>
+        </form>
+      </Modal>
 
       {/* Completed Invoice Print Modal */}
       <Modal

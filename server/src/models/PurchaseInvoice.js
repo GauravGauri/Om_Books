@@ -27,6 +27,15 @@ const purchaseInvoiceItemSchema = new mongoose.Schema({
     trim: true,
     default: '10 Tablets / Strip',
   },
+  unitsPerPack: {
+    type: Number,
+    default: 10,
+    min: 1,
+  },
+  looseQuantity: {
+    type: Number,
+    default: 0,
+  },
   mfgDate: Date,
   expiryDate: {
     type: Date,

@@ -81,12 +81,20 @@ export const ThermalReceipt = ({ invoice, outlet, onClose }) => {
                       ? new Date(item.expiryDate).toLocaleDateString('en-US', { month: '2-digit', year: '2-digit' })
                       : 'N/A'}
                   </span>
-                  <span className="col-span-2 text-right">{item.quantity}</span>
+                  <span className="col-span-2 text-right font-bold text-slate-900">
+                    {item.isLoose
+                      ? `${item.looseQuantity || item.quantity} ${item.unitType || 'Tab'}`
+                      : `${item.quantity} ${item.unitType || 'Strip'}`}
+                  </span>
                   <span className="col-span-3 text-right font-bold">{formatCurrency(item.totalAmount)}</span>
                 </div>
                 <div className="text-[9px] text-slate-500 flex justify-between px-0.5">
                   <span>Batch: {item.batchNumber}</span>
-                  <span>MRP: {formatCurrency(item.mrp)} (GST {item.gstRate || 0}%)</span>
+                  <span>
+                    {item.isLoose
+                      ? `Rate: ${formatCurrency(item.unitPrice)}/${item.unitType || 'Tab'}`
+                      : `Rate: ${formatCurrency(item.unitPrice)}`} (GST {item.gstRate || 0}%)
+                  </span>
                 </div>
               </div>
             ))}
@@ -119,17 +127,20 @@ export const ThermalReceipt = ({ invoice, outlet, onClose }) => {
               <span>{formatCurrency(invoice.roundOff)}</span>
             </div>
           )}
-          <div className="flex justify-between font-bold text-sm pt-1 border-t border-slate-200">
-            <span>GRAND TOTAL:</span>
+          <div className="flex justify-between text-sm font-bold text-slate-900 pt-1 border-t border-slate-200">
+            <span>Grand Total:</span>
             <span>{formatCurrency(invoice.grandTotal)}</span>
+          </div>
+          <div className="flex justify-between text-[10px] text-slate-500">
+            <span>Payment Method:</span>
+            <span className="font-semibold text-slate-700 uppercase">{invoice.paymentMethod || 'Cash'}</span>
           </div>
         </div>
 
-        <div className="py-2 text-[10px] space-y-0.5 text-center text-slate-500">
-          <p>Payment Mode: <strong className="font-semibold text-slate-800">{invoice.paymentMethod || 'Cash'}</strong></p>
-          <p className="italic">Goods once sold will be accepted back within 7 days with original cash memo.</p>
-          <p className="font-semibold text-slate-700 mt-1">*** Thank you! Get Well Soon ***</p>
-          <p className="text-[9px] text-slate-400">Powered by HomeBooks Pharmacy ERP</p>
+        <div className="text-center pt-3 text-[10px] text-slate-500 space-y-0.5">
+          <p className="font-semibold text-slate-700">Thank you for visiting {storeName}!</p>
+          <p>Medicines once sold can only be returned within 7 days with original cash memo.</p>
+          <p className="font-mono text-[9px] text-slate-400 pt-1">Powered by Om Books Pharma ERP</p>
         </div>
       </div>
     </div>

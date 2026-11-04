@@ -235,8 +235,13 @@ export const InventoryPage = () => {
                           b.availableQuantity <= 10 ? 'text-amber-600' : 'text-slate-900'
                         }`}
                       >
-                        {b.availableQuantity} units
+                        {b.availableQuantity} {b.product?.uom || 'Packs'}
                       </span>
+                      {b.product?.unitsPerPack > 1 && (
+                        <span className="block text-[10px] text-emerald-700 font-mono font-semibold">
+                          ({Math.floor(b.availableQuantity * b.product.unitsPerPack)} {b.product?.looseUnitName || 'tabs'})
+                        </span>
+                      )}
                     </td>
                     <td className="py-3 px-4 text-right">
                       <div className="flex items-center justify-end gap-1.5">

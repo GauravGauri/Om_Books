@@ -62,7 +62,7 @@ export const checkoutPOS = async (data, user, req) => {
   let totalTax = 0;
   const processedItems = [];
 
-  // Validate and deduct stock for each item
+  // Validate and deduct stock for each item (supports Marg ERP loose/fractional dispensing)
   for (const item of items) {
     const batch = await InventoryBatch.findById(item.batchId).populate('product');
     if (!batch) {
@@ -76,27 +76,61 @@ export const checkoutPOS = async (data, user, req) => {
       );
     }
 
+    // Loose dispensing logic (Marg ERP style)
+    const isLoose = Boolean(item.isLoose);
+    const unitsPerPack = Number(item.unitsPerPack || batch.product?.unitsPerPack || 10);
+    const defaultLooseUnit = batch.product?.dosageForm === 'Capsule' ? 'Cap' : batch.product?.dosageForm === 'Respule' ? 'Respule' : 'Tab';
+    const unitType = item.unitType || (isLoose ? defaultLooseUnit : (batch.product?.uom || 'Strip'));
+
+    let packQty = 0;
+    let looseQty = 0;
+    let unitPrice = 0;
+    let lineGross = 0;
+    let perUnitRate = 0;
+
+    if (isLoose) {
+      // Loose dispensing in tabs/capsules/respules
+      if (item.looseQuantity != null && item.looseQuantity > 0) {
+        looseQty = Number(item.looseQuantity);
+        packQty = Math.round((looseQty / unitsPerPack) * 10000) / 10000;
+      } else {
+        packQty = Number(item.quantity || 0);
+        looseQty = Math.round(packQty * unitsPerPack);
+      }
+
+      perUnitRate = item.unitPrice || Math.round(((batch.sellingPrice || batch.product?.sellingPrice || 0) / unitsPerPack) * 100) / 100;
+      unitPrice = perUnitRate;
+      lineGross = Math.round(unitPrice * looseQty * 100) / 100;
+    } else {
+      // Full pack dispensing (strips, bottles, packets, etc.)
+      packQty = Number(item.quantity || 1);
+      looseQty = Math.round(packQty * unitsPerPack);
+      unitPrice = item.unitPrice || batch.sellingPrice || batch.product?.sellingPrice || 0;
+      perUnitRate = Math.round((unitPrice / unitsPerPack) * 100) / 100;
+      lineGross = Math.round(unitPrice * packQty * 100) / 100;
+    }
+
     // Safety: check stock availability
-    if (batch.availableQuantity < item.quantity) {
+    if (batch.availableQuantity < packQty) {
+      const availLoose = Math.floor(batch.availableQuantity * unitsPerPack);
       throw new Error(
-        `Insufficient stock for ${batch.product.name} (Batch: ${batch.batchNumber}). Requested: ${item.quantity}, Available: ${batch.availableQuantity}`
+        `Insufficient stock for ${batch.product.name} (Batch: ${batch.batchNumber}). Requested: ${isLoose ? `${looseQty} ${unitType}` : `${packQty} packs`}, Available: ${batch.availableQuantity} packs (${availLoose} ${unitType})`
       );
     }
 
     // Deduct batch stock
     const prevQty = batch.availableQuantity;
-    batch.availableQuantity -= item.quantity;
-    if (batch.availableQuantity === 0) {
+    batch.availableQuantity = Math.max(0, Math.round((batch.availableQuantity - packQty) * 10000) / 10000);
+    if (batch.availableQuantity <= 0.0001) {
+      batch.availableQuantity = 0;
       batch.status = 'Depleted';
     }
     await batch.save();
 
-    // Calculate line item financials
-    const unitPrice = item.unitPrice || batch.sellingPrice;
-    const lineGross = unitPrice * item.quantity;
+    // Line financials
     const discountPct = Number(item.discountPercent || customDiscountPercent || 0);
     const itemDiscount = Math.round(((lineGross * discountPct) / 100) * 100) / 100;
-    const taxableAmount = lineGross - itemDiscount;
+    const taxableAmount = Math.round((lineGross - itemDiscount) * 100) / 100;
     const gstRate = item.gstRate || batch.product.gstRate || 12;
     const itemTax = Math.round(((taxableAmount * gstRate) / 100) * 100) / 100;
     const lineTotal = Math.round((taxableAmount + itemTax) * 100) / 100;
@@ -112,12 +146,14 @@ export const checkoutPOS = async (data, user, req) => {
       batch: batch._id,
       outlet,
       movementType: 'SALE_OUT',
-      quantity: -item.quantity,
+      quantity: -packQty,
       previousQuantity: prevQty,
       newQuantity: batch.availableQuantity,
       referenceType: 'SalesInvoice',
       referenceNumber: invoiceNumber,
-      remarks: `POS Sale to ${customerName}`,
+      remarks: isLoose
+        ? `POS Loose Sale: ${looseQty} ${unitType} (${packQty} packs) to ${customerName}`
+        : `POS Sale to ${customerName}`,
       performedBy: user._id,
     });
 
@@ -129,9 +165,15 @@ export const checkoutPOS = async (data, user, req) => {
       batch: batch._id,
       batchNumber: batch.batchNumber,
       expiryDate: batch.expiryDate,
-      quantity: item.quantity,
+      quantity: packQty,
+      isLoose,
+      unitType,
+      unitsPerPack,
+      packQuantity: packQty,
+      looseQuantity: looseQty,
+      perUnitRate,
       unitPrice,
-      mrp: batch.mrp,
+      mrp: isLoose ? Math.round((batch.mrp / unitsPerPack) * 100) / 100 : batch.mrp,
       discountPercent: discountPct,
       taxableAmount,
       gstRate,

@@ -9,6 +9,7 @@ import {
   AlertTriangle,
   Download,
   CheckCircle,
+  Package,
 } from 'lucide-react';
 import apiClient from '../api/client';
 import { useAuthStore } from '../store/useAuthStore';
@@ -17,6 +18,21 @@ import { Button } from '../components/common/Button';
 import { Input } from '../components/common/Input';
 import { Badge } from '../components/common/Badge';
 import { Modal } from '../components/common/Modal';
+
+const DOSAGE_FORMS = [
+  'Tablet',
+  'Capsule',
+  'Syrup',
+  'Injection',
+  'Ointment',
+  'Drops',
+  'Inhaler',
+  'Suspension',
+  'Powder',
+  'Respule',
+  'Packet',
+  'Other',
+];
 
 export const ProductsPage = () => {
   const { currentOutlet } = useAuthStore();
@@ -46,11 +62,14 @@ export const ProductsPage = () => {
     manufacturer: '',
     dosageForm: 'Tablet',
     strength: '',
-    packSize: '10 Tablets / Strip',
+    packSize: '1x10',
+    unitsPerPack: 10,
+    allowLooseSale: true,
+    looseUnitName: 'Tab',
     uom: 'Strip',
-    purchasePrice: 0,
-    sellingPrice: 0,
-    mrp: 0,
+    purchasePrice: 20,
+    sellingPrice: 30,
+    mrp: 35,
     gstRate: 12,
     minStockLevel: 20,
     scheduleType: 'OTC',
@@ -96,6 +115,74 @@ export const ProductsPage = () => {
     }
   };
 
+  const handleDosageFormChange = (form) => {
+    let looseUnit = 'Tab';
+    let allowLoose = true;
+    let units = 10;
+    let uom = 'Strip';
+    let defaultPack = '1x10';
+
+    if (form === 'Capsule') {
+      looseUnit = 'Cap';
+      allowLoose = true;
+      units = 10;
+      uom = 'Strip';
+      defaultPack = '1x10';
+    } else if (form === 'Respule') {
+      looseUnit = 'Respule';
+      allowLoose = true;
+      units = 5;
+      uom = 'Pack';
+      defaultPack = '5x2ml';
+    } else if (form === 'Syrup' || form === 'Suspension') {
+      looseUnit = 'ml';
+      allowLoose = false;
+      units = 1;
+      uom = 'Bottle';
+      defaultPack = '100ml';
+    } else if (form === 'Injection') {
+      looseUnit = 'Vial';
+      allowLoose = false;
+      units = 1;
+      uom = 'Vial';
+      defaultPack = '1 Vial';
+    } else if (form === 'Ointment') {
+      looseUnit = 'Tube';
+      allowLoose = false;
+      units = 1;
+      uom = 'Tube';
+      defaultPack = '15g';
+    } else if (form === 'Drops') {
+      looseUnit = 'ml';
+      allowLoose = false;
+      units = 1;
+      uom = 'Bottle';
+      defaultPack = '10ml';
+    } else if (form === 'Packet') {
+      looseUnit = 'Packet';
+      allowLoose = false;
+      units = 1;
+      uom = 'Pack';
+      defaultPack = '1 Pkt';
+    } else if (form === 'Powder') {
+      looseUnit = 'g';
+      allowLoose = false;
+      units = 1;
+      uom = 'Pack';
+      defaultPack = '100g';
+    }
+
+    setFormData((prev) => ({
+      ...prev,
+      dosageForm: form,
+      looseUnitName: looseUnit,
+      allowLooseSale: allowLoose,
+      unitsPerPack: units,
+      uom,
+      packSize: prev.packSize || defaultPack,
+    }));
+  };
+
   const handleOpenAdd = () => {
     setEditingProduct(null);
     setFormData({
@@ -109,7 +196,10 @@ export const ProductsPage = () => {
       manufacturer: manufacturers[0]?._id || '',
       dosageForm: 'Tablet',
       strength: '500mg',
-      packSize: '10 Tablets / Strip',
+      packSize: '1x10',
+      unitsPerPack: 10,
+      allowLooseSale: true,
+      looseUnitName: 'Tab',
       uom: 'Strip',
       purchasePrice: 20,
       sellingPrice: 30,
@@ -134,7 +224,10 @@ export const ProductsPage = () => {
       manufacturer: p.manufacturer?._id || p.manufacturer || '',
       dosageForm: p.dosageForm || 'Tablet',
       strength: p.strength || '',
-      packSize: p.packSize || '10 Tablets / Strip',
+      packSize: p.packSize || '1x10',
+      unitsPerPack: p.unitsPerPack != null ? p.unitsPerPack : 10,
+      allowLooseSale: p.allowLooseSale !== undefined ? p.allowLooseSale : true,
+      looseUnitName: p.looseUnitName || 'Tab',
       uom: p.uom || 'Strip',
       purchasePrice: p.purchasePrice,
       sellingPrice: p.sellingPrice,
@@ -161,31 +254,35 @@ export const ProductsPage = () => {
     }
   };
 
+  const perUnitMrp = formData.unitsPerPack > 0 ? (formData.mrp / formData.unitsPerPack).toFixed(2) : 0;
+  const perUnitSelling = formData.unitsPerPack > 0 ? (formData.sellingPrice / formData.unitsPerPack).toFixed(2) : 0;
+  const perUnitCost = formData.unitsPerPack > 0 ? (formData.purchasePrice / formData.unitsPerPack).toFixed(2) : 0;
+
   return (
     <div className="space-y-5">
       {/* Page Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-xl font-bold text-slate-900 tracking-tight">Medicine & Product Catalog</h2>
+          <h2 className="text-xl font-bold text-slate-900 tracking-tight">Medicines Master & Pricing</h2>
           <p className="text-xs text-slate-500 mt-0.5">
-            Master database of pharmaceuticals, generic salts, schedule classifications and pricing
+            Manage pharmaceuticals, Marg ERP pack conversions, loose tablet dispensing, and pricing
           </p>
         </div>
         <Button variant="primary" size="sm" icon={Plus} onClick={handleOpenAdd}>
-          Add New Medicine
+          Add Medicine
         </Button>
       </div>
 
-      {/* Filter Toolbar */}
-      <div className="bg-white p-3.5 sm:p-4 rounded-2xl border border-slate-200/80 shadow-sm flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-2.5 sm:gap-3">
-        <div className="relative flex-1 min-w-[200px]">
+      {/* Filter and Search Bar */}
+      <div className="bg-white p-3 rounded-2xl border border-slate-200/80 shadow-sm flex flex-col md:flex-row gap-2.5 items-stretch md:items-center justify-between">
+        <div className="relative flex-1">
           <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5 pointer-events-none" />
           <input
             type="text"
-            placeholder="Search by medicine name, generic composition, or SKU..."
+            placeholder="Search brand name, generic salt, SKU or barcode..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-9 pr-3 py-1.5 text-xs text-slate-900 focus:outline-none focus:border-emerald-500"
+            className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-9 pr-3 py-1.5 text-xs text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-emerald-500"
           />
         </div>
 
@@ -220,15 +317,15 @@ export const ProductsPage = () => {
       {/* Medicines Table */}
       <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs min-w-[700px]">
+          <table className="w-full text-left text-xs min-w-[760px]">
             <thead>
               <tr className="border-b border-slate-100 bg-slate-50/70 text-slate-400 font-semibold uppercase tracking-wider text-[10px]">
                 <th className="py-3 px-4">Medicine Details</th>
                 <th className="py-3 px-3">Manufacturer</th>
-                <th className="py-3 px-3">Classification</th>
-                <th className="py-3 px-3 text-right">Cost</th>
-                <th className="py-3 px-3 text-right">MRP</th>
+                <th className="py-3 px-3">Packing / Conversion</th>
+                <th className="py-3 px-3 text-right">Pack MRP</th>
                 <th className="py-3 px-3 text-right">Selling Price</th>
+                <th className="py-3 px-3 text-right">Per Unit Rate</th>
                 <th className="py-3 px-3 text-center">In Stock</th>
                 <th className="py-3 px-4 text-right">Actions</th>
               </tr>
@@ -249,6 +346,8 @@ export const ProductsPage = () => {
               ) : (
                 products.map((p) => {
                   const inStock = p.currentStock > 0;
+                  const conv = p.unitsPerPack || 1;
+                  const perUnitSellingRate = conv > 1 ? (p.sellingPrice / conv).toFixed(2) : null;
                   return (
                     <tr key={p._id} className="hover:bg-slate-50/80 transition-colors">
                       <td className="py-3 px-4">
@@ -257,24 +356,33 @@ export const ProductsPage = () => {
                       </td>
                       <td className="py-3 px-3 text-slate-600">{p.manufacturer?.shortName || p.manufacturer?.name || 'N/A'}</td>
                       <td className="py-3 px-3">
-                        <Badge
-                          variant={
-                            p.scheduleType === 'OTC'
-                              ? 'default'
-                              : p.scheduleType === 'Schedule H1'
-                              ? 'danger'
-                              : 'warning'
-                          }
-                        >
-                          {p.scheduleType}
-                        </Badge>
-                      </td>
-                      <td className="py-3 px-3 text-right font-mono text-slate-500">
-                        {formatCurrency(p.purchasePrice)}
+                        <div className="space-y-0.5">
+                          <span className="font-semibold text-slate-800 block">
+                            {p.packSize || `${conv}'s`} ({p.dosageForm || 'Tablet'})
+                          </span>
+                          {p.allowLooseSale && conv > 1 ? (
+                            <span className="inline-block bg-emerald-50 text-emerald-700 text-[9px] px-1.5 py-0.2 rounded font-semibold border border-emerald-200">
+                              Loose: {conv} {p.looseUnitName || 'Tabs'}/pack
+                            </span>
+                          ) : (
+                            <span className="inline-block bg-slate-100 text-slate-600 text-[9px] px-1.5 py-0.2 rounded font-medium">
+                              Full Pack Only
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td className="py-3 px-3 text-right font-mono text-slate-500">{formatCurrency(p.mrp)}</td>
                       <td className="py-3 px-3 text-right font-mono font-bold text-emerald-700">
                         {formatCurrency(p.sellingPrice)}
+                      </td>
+                      <td className="py-3 px-3 text-right font-mono text-slate-600">
+                        {perUnitSellingRate ? (
+                          <span className="font-bold text-emerald-800">
+                            {formatCurrency(perUnitSellingRate)}/{p.looseUnitName || 'Tab'}
+                          </span>
+                        ) : (
+                          <span className="text-slate-400">-</span>
+                        )}
                       </td>
                       <td className="py-3 px-3 text-center">
                         <span
@@ -282,8 +390,13 @@ export const ProductsPage = () => {
                             inStock ? 'text-slate-800' : 'text-red-500 font-black'
                           }`}
                         >
-                          {p.currentStock || 0} {p.uom}s
+                          {p.currentStock || 0} {p.uom || 'Pack'}s
                         </span>
+                        {inStock && conv > 1 && (
+                          <span className="block text-[9px] text-slate-400 font-mono">
+                            ({Math.floor((p.currentStock || 0) * conv)} {p.looseUnitName || 'tabs'})
+                          </span>
+                        )}
                       </td>
                       <td className="py-3 px-4 text-right">
                         <button
@@ -334,8 +447,9 @@ export const ProductsPage = () => {
       <Modal
         isOpen={showModal}
         onClose={() => setShowModal(false)}
+        maxWidth="max-w-2xl"
         title={editingProduct ? 'Edit Medicine Details' : 'Add New Medicine to Master'}
-        subtitle="Configure generic composition, schedule drug compliance and pricing"
+        subtitle="Configure generic composition, Marg ERP pack conversions, and loose tablet dispensing"
       >
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -417,27 +531,109 @@ export const ProductsPage = () => {
             </div>
           </div>
 
+          {/* Marg ERP Style Packaging & Loose Dispensing Section */}
+          <div className="p-3.5 bg-emerald-50/40 border border-emerald-200 rounded-xl space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-emerald-950 uppercase tracking-wider flex items-center gap-1.5">
+                <Package className="w-3.5 h-3.5 text-emerald-600" />
+                Packaging & Marg ERP Loose Dispensing
+              </span>
+              <span className="text-[10px] text-emerald-700 font-medium">Conversion Factor</span>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+              <div>
+                <label className="text-[10px] font-bold text-slate-600 uppercase block mb-1">Dosage Form</label>
+                <select
+                  value={formData.dosageForm}
+                  onChange={(e) => handleDosageFormChange(e.target.value)}
+                  className="w-full bg-white border border-slate-200 rounded-lg p-1.5 text-xs text-slate-800 font-medium"
+                >
+                  {DOSAGE_FORMS.map((df) => (
+                    <option key={df} value={df}>
+                      {df}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="text-[10px] font-bold text-slate-600 uppercase block mb-1">Pack Size</label>
+                <input
+                  type="text"
+                  value={formData.packSize}
+                  onChange={(e) => setFormData({ ...formData, packSize: e.target.value })}
+                  placeholder="e.g. 1x10 or 1x15"
+                  className="w-full bg-white border border-slate-200 rounded-lg p-1.5 text-xs text-slate-800 font-medium"
+                />
+              </div>
+
+              <div>
+                <label className="text-[10px] font-bold text-slate-600 uppercase block mb-1">Tabs/Units Per Pack *</label>
+                <input
+                  type="number"
+                  min="1"
+                  value={formData.unitsPerPack}
+                  onChange={(e) => setFormData({ ...formData, unitsPerPack: Math.max(1, parseInt(e.target.value) || 1) })}
+                  className="w-full bg-white border border-slate-200 rounded-lg p-1.5 text-xs text-slate-800 font-bold"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="text-[10px] font-bold text-slate-600 uppercase block mb-1">Loose Unit Name</label>
+                <input
+                  type="text"
+                  value={formData.looseUnitName}
+                  onChange={(e) => setFormData({ ...formData, looseUnitName: e.target.value })}
+                  placeholder="Tab, Cap, etc."
+                  className="w-full bg-white border border-slate-200 rounded-lg p-1.5 text-xs text-slate-800 font-medium"
+                />
+              </div>
+            </div>
+
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-1 border-t border-emerald-100">
+              <label className="flex items-center gap-2 cursor-pointer select-none text-xs text-slate-800 font-medium">
+                <input
+                  type="checkbox"
+                  checked={formData.allowLooseSale}
+                  onChange={(e) => setFormData({ ...formData, allowLooseSale: e.target.checked })}
+                  className="rounded text-emerald-600 focus:ring-emerald-500 w-4 h-4"
+                />
+                <span>Can this medicine be sold loose / in decimals (e.g. individual tablets)?</span>
+              </label>
+
+              {formData.allowLooseSale && formData.unitsPerPack > 1 && (
+                <div className="flex items-center gap-3 text-[10px] font-mono text-emerald-900 bg-white px-2 py-1 rounded-lg border border-emerald-200 shrink-0">
+                  <span>MRP: ₹{perUnitMrp}/{formData.looseUnitName}</span>
+                  <span>•</span>
+                  <span>Rate: ₹{perUnitSelling}/{formData.looseUnitName}</span>
+                </div>
+              )}
+            </div>
+          </div>
+
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <Input
-              label="Purchase Cost (₹)"
+              label="Purchase Cost / Pack (₹)"
               type="number"
-              step="0.1"
+              step="0.01"
               value={formData.purchasePrice}
               onChange={(e) => setFormData({ ...formData, purchasePrice: parseFloat(e.target.value) || 0 })}
               required
             />
             <Input
-              label="MRP (₹)"
+              label="MRP / Pack (₹)"
               type="number"
-              step="0.1"
+              step="0.01"
               value={formData.mrp}
               onChange={(e) => setFormData({ ...formData, mrp: parseFloat(e.target.value) || 0 })}
               required
             />
             <Input
-              label="Selling Price (₹)"
+              label="Selling Price / Pack (₹)"
               type="number"
-              step="0.1"
+              step="0.01"
               value={formData.sellingPrice}
               onChange={(e) => setFormData({ ...formData, sellingPrice: parseFloat(e.target.value) || 0 })}
               required
@@ -467,7 +663,7 @@ export const ProductsPage = () => {
             </div>
 
             <Input
-              label="Min Reorder Stock Alert"
+              label="Min Reorder Stock Alert (Packs)"
               type="number"
               value={formData.minStockLevel}
               onChange={(e) => setFormData({ ...formData, minStockLevel: parseInt(e.target.value) || 20 })}

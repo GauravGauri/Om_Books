@@ -93,6 +93,7 @@ export const PurchasesPage = () => {
   const [batchNumber, setBatchNumber] = useState('');
   const [expiryDate, setExpiryDate] = useState('');
   const [packSize, setPackSize] = useState('1x10');
+  const [unitsPerPack, setUnitsPerPack] = useState(10);
   const [qty, setQty] = useState(10);
   const [freeQty, setFreeQty] = useState(0);
   const [mrp, setMrp] = useState(35);
@@ -175,6 +176,7 @@ export const PurchasesPage = () => {
     setMrp(prod.mrp || 0);
     setGstRate(prod.gstRate != null ? prod.gstRate : 12);
     setPackSize(prod.packSize || prod.uom || '1x10');
+    setUnitsPerPack(prod.unitsPerPack != null ? prod.unitsPerPack : (prod.dosageForm === 'Syrup' || prod.dosageForm === 'Injection' || prod.dosageForm === 'Packet' ? 1 : 10));
     setIsMedicineDropdownOpen(false);
   };
 
@@ -227,6 +229,8 @@ export const PurchasesPage = () => {
       itemType: itemType || 'Tablet',
       hsnCode: hsnCode || '3004',
       packSize: (packSize || '1x10').trim(),
+      unitsPerPack: Number(unitsPerPack || 10),
+      looseQuantity: (Number(qty) + Number(freeQty || 0)) * Number(unitsPerPack || 10),
       batchNumber: batchNumber.toUpperCase().trim(),
       expiryDate,
       quantity: Number(qty),
@@ -674,6 +678,20 @@ export const PurchasesPage = () => {
                 </datalist>
               </div>
 
+              {/* 6B. TABS/UNITS PER PACK (Marg ERP conversion factor) */}
+              <div className="col-span-1 lg:col-span-1">
+                <label className="text-[10px] font-bold text-emerald-800 uppercase tracking-wider block mb-1 text-center truncate" title="How many tablets/capsules/units in 1 packet/strip">
+                  Tabs/Pack *
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  value={unitsPerPack}
+                  onChange={(e) => setUnitsPerPack(Math.max(1, parseInt(e.target.value) || 1))}
+                  className="w-full bg-emerald-50/60 border border-emerald-300 rounded-lg px-1.5 py-1.5 text-xs text-center font-bold text-emerald-950 focus:outline-none focus:border-emerald-500"
+                />
+              </div>
+
               {/* 7. QTY */}
               <div className="col-span-1 lg:col-span-1">
                 <label className="text-[10px] font-bold text-slate-600 uppercase tracking-wider block mb-1 text-center">
@@ -798,6 +816,20 @@ export const PurchasesPage = () => {
                 </Button>
               </div>
             </div>
+
+            {/* Live Marg ERP conversion breakdown banner */}
+            <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-emerald-900 bg-white/80 p-2.5 rounded-xl border border-emerald-200">
+              <div className="flex items-center gap-3 font-medium">
+                <span>📦 Total Packs: <strong>{(Number(qty) || 0) + (Number(freeQty) || 0)}</strong> ({qty} billed + {freeQty} free)</span>
+                <span>•</span>
+                <span>💊 Total Loose Units: <strong className="text-emerald-700">{((Number(qty) || 0) + (Number(freeQty) || 0)) * (Number(unitsPerPack) || 10)}</strong> ({unitsPerPack} tabs/pack)</span>
+                <span>•</span>
+                <span>💰 Cost/Tab: <strong>₹{((Number(purchasePrice) || 0) / (Number(unitsPerPack) || 1)).toFixed(2)}</strong></span>
+              </div>
+              <span className="text-[10px] text-slate-500 font-mono">
+                Marg ERP Packing Factor
+              </span>
+            </div>
           </div>
 
           {/* STAGED ITEMS CONSIGNMENT TABLE: Responsive horizontal scroll */}
@@ -807,11 +839,13 @@ export const PurchasesPage = () => {
                 Purchase Bill Items ({inwardItems.length})
               </span>
               <span className="text-[11px] text-slate-500">
-                Total Units Staged:{' '}
+                Total Staged:{' '}
                 <strong>
-                  {inwardItems.reduce((acc, it) => acc + it.quantity + (it.freeQuantity || 0), 0)}
+                  {inwardItems.reduce((acc, it) => acc + it.quantity + (it.freeQuantity || 0), 0)} packs
                 </strong>{' '}
-                (incl. free units)
+                <span className="text-emerald-700 font-semibold">
+                  ({inwardItems.reduce((acc, it) => acc + (it.quantity + (it.freeQuantity || 0)) * (it.unitsPerPack || 10), 0)} loose units)
+                </span>
               </span>
             </div>
 
@@ -824,7 +858,7 @@ export const PurchasesPage = () => {
                     <th className="py-2.5 px-2">Type</th>
                     <th className="py-2.5 px-2">Batch</th>
                     <th className="py-2.5 px-2">Expiry</th>
-                    <th className="py-2.5 px-2">Pack</th>
+                    <th className="py-2.5 px-2">Pack (Tabs/Pk)</th>
                     <th className="py-2.5 px-2 text-right">Qty</th>
                     <th className="py-2.5 px-2 text-right text-emerald-700">Free</th>
                     <th className="py-2.5 px-2 text-right">Rate</th>
@@ -857,7 +891,7 @@ export const PurchasesPage = () => {
                         </td>
                         <td className="py-2 px-2 font-mono font-bold text-slate-800">{item.batchNumber}</td>
                         <td className="py-2 px-2 text-slate-600">{formatDate(item.expiryDate)}</td>
-                        <td className="py-2 px-2 font-mono text-slate-600">{item.packSize}</td>
+                        <td className="py-2 px-2 font-mono text-slate-600">{item.packSize} <span className="text-[10px] text-emerald-700 block font-sans">({item.unitsPerPack || 10} tabs)</span></td>
                         <td className="py-2 px-2 text-right font-bold text-slate-900">{item.quantity}</td>
                         <td className="py-2 px-2 text-right font-bold text-emerald-700">
                           {item.freeQuantity > 0 ? `+${item.freeQuantity}` : '0'}

@@ -25,10 +25,32 @@ const salesInvoiceItemSchema = new mongoose.Schema({
     type: Date,
     required: true,
   },
+  // Supports decimal/fractional packs (e.g. 0.7 strip for 7 tabs of a 10 tab strip)
   quantity: {
     type: Number,
     required: true,
-    min: 1,
+    min: 0.0001,
+  },
+  isLoose: {
+    type: Boolean,
+    default: false,
+  },
+  unitType: {
+    type: String,
+    default: 'Strip',
+  },
+  unitsPerPack: {
+    type: Number,
+    default: 1,
+  },
+  packQuantity: {
+    type: Number,
+  },
+  looseQuantity: {
+    type: Number,
+  },
+  perUnitRate: {
+    type: Number,
   },
   unitPrice: {
     type: Number,

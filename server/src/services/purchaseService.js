@@ -90,6 +90,7 @@ export const receiveGoodsInvoice = async (data, user, req) => {
     const rate = Number(item.purchasePrice || 0);
     const discPct = Number(item.discountPercent || 0);
     const gstRate = item.gstRate != null ? Number(item.gstRate) : 12;
+    const unitsPerPack = Number(item.unitsPerPack || 10);
 
     const lineGross = qty * rate;
     const itemDisc = Math.round(((lineGross * discPct) / 100) * 100) / 100;
@@ -110,6 +111,7 @@ export const receiveGoodsInvoice = async (data, user, req) => {
     const prevQty = batch ? batch.availableQuantity : 0;
     // Total physical stock added includes both purchased and free units!
     const totalQty = qty + freeQty;
+    const looseQuantity = totalQty * unitsPerPack;
 
     if (batch) {
       batch.quantityReceived += totalQty;
@@ -137,10 +139,12 @@ export const receiveGoodsInvoice = async (data, user, req) => {
       });
     }
 
-    // Update Product packSize and dosageForm (itemType) if specified
+    // Update Product packSize, dosageForm, unitsPerPack and allowLooseSale if specified
     const productUpdate = {};
     if (item.packSize) productUpdate.packSize = item.packSize;
     if (item.itemType) productUpdate.dosageForm = item.itemType;
+    if (item.unitsPerPack) productUpdate.unitsPerPack = Number(item.unitsPerPack);
+    if (item.allowLooseSale !== undefined) productUpdate.allowLooseSale = Boolean(item.allowLooseSale);
     if (Object.keys(productUpdate).length > 0) {
       await Product.findByIdAndUpdate(item.product, productUpdate);
     }
@@ -167,6 +171,8 @@ export const receiveGoodsInvoice = async (data, user, req) => {
       hsnCode: item.hsnCode || '3004',
       batchNumber: item.batchNumber.trim().toUpperCase(),
       packSize: item.packSize || '10 Tablets / Strip',
+      unitsPerPack,
+      looseQuantity,
       expiryDate: item.expiryDate,
       quantity: qty,
       freeQuantity: freeQty,
